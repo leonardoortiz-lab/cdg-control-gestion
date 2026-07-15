@@ -22,6 +22,11 @@ const db = {
   deleteTask:  (id)=> sbFetch(`/tasks?id=eq.${id}`, {method:"DELETE"}),
   addComment:  (taskId,uid,text)=> sbFetch("/comments",{method:"POST",body:JSON.stringify({task_id:taskId,user_id:uid,text})}),
   seedTasks:   async(tasks)=>{ await sbFetch("/tasks?id=neq.NONE",{method:"DELETE"}); for(const t of tasks) await db.upsertTask(t); },
+  // ── Notifications ──
+  getNotifications: (uid)=> sbFetch(`/notifications?user_id=eq.${uid}&order=created_at.desc&limit=50`),
+  addNotification:  (n)=> sbFetch("/notifications",{method:"POST",body:JSON.stringify(n)}),
+  markRead:    (id)=> sbFetch(`/notifications?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({read:true})}),
+  markAllRead: (uid)=> sbFetch(`/notifications?user_id=eq.${uid}&read=eq.false`,{method:"PATCH",body:JSON.stringify({read:true})}),
 };
 
 // ─────────────────────────────────────────────
@@ -321,6 +326,8 @@ export default function App() {
   const [toast, setToast]           = useState(null);
   const [lastError, setLastError]   = useState(null);
   const [menuOpen, setMenuOpen]     = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifs, setShowNotifs] = useState(false);
   const mob = useIsMobile();
   const pollRef = useRef(null);
 
@@ -346,8 +353,54 @@ export default function App() {
       if(!silent) setLoaded(true);
     }
   }
+
+  // ── Load notificaciones del usuario actual ──
+  async function loadNotifications(uid) {
+    try {
+      const notifs = await db.getNotifications(uid);
+      setNotifications(notifs);
+    } catch(e) { console.error(e); }
+  }
+
+  // ── Enviar notificación ──
+  async function sendNotif(toUid, type, message, task) {
+    if(!currentUser || toUid === currentUser.id) return; // no notificarse a sí mismo
+    try {
+      await db.addNotification({
+        user_id: toUid,
+        type,
+        message,
+        task_id: task?.id || null,
+        task_title: task?.title || null,
+        created_by: currentUser.id,
+        read: false,
+      });
+    } catch(e) { console.error("sendNotif error:", e); }
+  }
+
+  // ── Notificar nueva tarea a admins ──
+  async function notifyNewTask(task) {
+    const admins = USERS.filter(u => u.role === "admin");
+    for(const admin of admins) {
+      const creator = USERS.find(u=>u.id===currentUser.id);
+      await sendNotif(admin.id, "nueva_tarea",
+        `${creator?.name} agregó una nueva tarea: "${task.title}" (día ${task.day})`, task);
+    }
+  }
+
+  // ── Notificar a responsables asignados ──
+  async function notifyAssigned(task, prevResp=[]) {
+    const newlyAdded = task.resp.filter(uid => !prevResp.includes(uid));
+    for(const uid of newlyAdded) {
+      const creator = USERS.find(u=>u.id===currentUser.id);
+      await sendNotif(uid, "asignado",
+        `${creator?.name} te asignó a la tarea: "${task.title}" (día ${task.day})`, task);
+    }
+  }
+
   useEffect(()=>{ loadFromDB(); },[]);
   useEffect(()=>{ pollRef.current=setInterval(()=>loadFromDB(true),15000); return ()=>clearInterval(pollRef.current); },[]);
+  useEffect(()=>{ if(currentUser) { loadNotifications(currentUser.id); const t=setInterval(()=>loadNotifications(currentUser.id),20000); return ()=>clearInterval(t); } },[currentUser]);
 
   // ── Persist ──
   async function persistTask(t) {
@@ -400,16 +453,25 @@ export default function App() {
     const nt = {id:"t_"+Date.now(), month:selectedMonth, day, type:"otro", title:"Nueva tarea", resp:[currentUser.id], fixed:false};
     setTasks(prev=>[...prev,nt]);
     persistTask(nt);
+    notifyNewTask(nt);
     setActiveTask(nt);
   }
   async function saveTask(updated) {
+    // Detectar responsables anteriores para saber quiénes son nuevos
+    const prevTask = tasks.find(t=>t.id===updated.id);
+    const prevResp = prevTask?.resp || [];
     // Actualizar estado local inmediatamente
     setTasks(prev=>prev.map(t=>t.id===updated.id?updated:t));
     setActiveTask(updated);
     // Persistir en Supabase
     const ok = await persistTask(updated);
-    if(ok) showToast("Guardado ✓");
-    else showToast("⚠️ Error al guardar — intenta de nuevo");
+    if(ok) {
+      showToast("Guardado ✓");
+      // Notificar a nuevos responsables asignados
+      notifyAssigned(updated, prevResp);
+    } else {
+      showToast("⚠️ Error al guardar — intenta de nuevo");
+    }
   }
   function deleteTask(id) {
     if(!currentUser||currentUser.role==="viewer") return;
@@ -466,6 +528,26 @@ export default function App() {
           ))}
           <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8,paddingRight:14}}>
             <SyncDot status={syncStatus}/>
+            {/* ── Campana de notificaciones ── */}
+            <div style={{position:"relative"}}>
+              <button onClick={()=>setShowNotifs(s=>!s)} style={{background:"none",border:"none",color:"white",cursor:"pointer",padding:"4px 6px",borderRadius:6,display:"flex",alignItems:"center",position:"relative"}}>
+                <span style={{fontSize:18}}>🔔</span>
+                {notifications.filter(n=>!n.read).length>0 && (
+                  <span style={{position:"absolute",top:0,right:0,background:"#e34948",color:"white",borderRadius:"50%",width:16,height:16,fontSize:9,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {notifications.filter(n=>!n.read).length}
+                  </span>
+                )}
+              </button>
+              {showNotifs && (
+                <NotifPanel
+                  notifs={notifications}
+                  currentUser={currentUser}
+                  onClose={()=>setShowNotifs(false)}
+                  onMarkRead={async(id)=>{ await db.markRead(id); setNotifications(prev=>prev.map(n=>n.id===id?{...n,read:true}:n)); }}
+                  onMarkAll={async()=>{ await db.markAllRead(currentUser.id); setNotifications(prev=>prev.map(n=>({...n,read:true}))); }}
+                />
+              )}
+            </div>
             <Avatar uid={currentUser.id} size={26}/>
             <span style={{fontSize:11.5,opacity:.85}}>{currentUser.name.split(" ")[0]}</span>
             <span style={{fontSize:10,background:"rgba(255,255,255,.15)",padding:"2px 7px",borderRadius:10,color:"rgba(255,255,255,.75)"}}>{currentUser.role}</span>
@@ -694,11 +776,24 @@ function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth
       {/* ── MOBILE: lista de días por semana ── */}
       {mob ? (
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          {workDays.map(d=>{
+          {/* Bloque pasados mobile */}
+          {isCurrentMonth && workDays.some(d=>d<todayDay) && (
+            <PastDaysBlock
+              days={workDays.filter(d=>d<todayDay)}
+              month={selectedMonth}
+              monthTasks={monthTasks}
+              comments={comments}
+              currentUser={currentUser}
+              setActiveTask={setActiveTask}
+              dupTarget={dupTarget}
+              handleDupClick={handleDupClick}
+            />
+          )}
+          {workDays.filter(d=> isCurrentMonth ? d>=todayDay : true).map(d=>{
             const dow   = getDOW(selectedMonth,d);
             const fer   = isFeriado(selectedMonth,d);
             const isToday = isCurrentMonth && d === todayDay;
-            const isPast  = isCurrentMonth ? d < todayDay : selectedMonth < todayMonth;
+            const isPast  = false; // pasados están en PastDaysBlock
             const dTasks  = monthTasks(selectedMonth,d);
             const isDupMode = !!dupTarget;
             if(dTasks.length===0 && !isToday && !fer) return null;
@@ -744,9 +839,30 @@ function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth
           <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6,marginBottom:6}}>
             {WDAYS.map((w,i)=><div key={w} style={{textAlign:"center",fontFamily:"monospace",fontSize:10.5,fontWeight:700,letterSpacing:.1,color:i===0?"#1d6b53":i===1?"#1a2f63":"#5b5f6b",textTransform:"uppercase"}}>{w}</div>)}
           </div>
+
+          {/* ── Bloque días pasados colapsado ── */}
+          {isCurrentMonth && workDays.some(d=>d<todayDay) && (
+            <PastDaysBlock
+              days={workDays.filter(d=>d<todayDay)}
+              month={selectedMonth}
+              monthTasks={monthTasks}
+              comments={comments}
+              currentUser={currentUser}
+              setActiveTask={setActiveTask}
+              dupTarget={dupTarget}
+              handleDupClick={handleDupClick}
+            />
+          )}
+
           <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
-            {Array.from({length:offset}).map((_,i)=><div key={"e"+i}/>)}
-            {workDays.map(d=>{
+            {/* offset vacío solo para el primer día hábil del mes cuando no hay pasados */}
+            {(!isCurrentMonth || !workDays.some(d=>d<todayDay)) && Array.from({length:offset}).map((_,i)=><div key={"e"+i}/>)}
+            {/* Si hay pasados, el offset ya lo maneja PastDaysBlock visualmente — el grid empieza en HOY */}
+            {workDays.filter(d=> isCurrentMonth ? d>=todayDay : true).map((d,idx)=>{
+              // Si hay días pasados agrupados, agregar celdas vacías para posicionar HOY correctamente
+              const needsOffset = isCurrentMonth && workDays.some(d2=>d2<todayDay) && idx===0;
+              const todayOffset = needsOffset ? getDOW(selectedMonth, d) : 0;
+              const emptyBefore = needsOffset ? Array.from({length:todayOffset}) : [];
               const dow  = getDOW(selectedMonth,d);
               const fer  = isFeriado(selectedMonth,d);
               const isToday = isCurrentMonth && d === todayDay;
@@ -755,7 +871,9 @@ function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth
               const isDropOver = dragOver===`${selectedMonth}-${d}`;
               const isDupMode  = !!dupTarget;
               return (
-                <div key={d}
+                <>
+                  {emptyBefore.map((_,i)=><div key={`off${i}`}/>)}
+                  <div key={d}
                   style={{
                     background: isPast?"#edecea": fer?"#f0ede6":dow===1?"#dfe7f7":"white",
                     border:`1.5px solid ${isDropOver?"#3b4d8c":isToday?"#1a2f63":isPast?"#d8d5d0":"#dad6cc"}`,
@@ -793,6 +911,7 @@ function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth
                     ))}
                   </div>
                 </div>
+                </>
               );
             })}
           </div>
@@ -1154,6 +1273,115 @@ function TaskModal({task, comments, currentUser, onClose, onSave, onDelete, onDu
             <button onClick={()=>onSave(draft)} style={{background:"#1a2f63",color:"white",border:"none",borderRadius:7,padding: mob?"9px 20px":"7px 18px",cursor:"pointer",fontSize:mob?15:13,fontWeight:700,minHeight:mob?42:undefined}}>Guardar</button>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// PAST DAYS BLOCK — días pasados agrupados
+// ─────────────────────────────────────────────
+function PastDaysBlock({days, month, monthTasks, comments, currentUser, setActiveTask, dupTarget, handleDupClick}) {
+  const [expanded, setExpanded] = useState(false);
+  const totalTasks = days.reduce((acc,d)=>acc+monthTasks(month,d).length,0);
+  const DOWLABELS = ["Lun","Mar","Mié","Jue","Vie"];
+
+  return (
+    <div style={{marginBottom:8}}>
+      {/* Header colapsable */}
+      <button onClick={()=>setExpanded(e=>!e)}
+        style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:"#edecea",border:"1px solid #d0cdc8",borderRadius:expanded?"8px 8px 0 0":8,cursor:"pointer",textAlign:"left",marginBottom:0}}>
+        <span style={{fontSize:11,fontFamily:"monospace",fontWeight:700,color:"#888"}}>{expanded?"▲":"▼"}</span>
+        <span style={{fontSize:12,fontWeight:700,color:"#888"}}>
+          Días pasados ({days[0]}–{days[days.length-1]} de {["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"][month]})
+        </span>
+        <span style={{marginLeft:"auto",fontSize:11,color:"#aaa",fontWeight:500}}>
+          {days.length} días · {totalTasks} tareas
+        </span>
+        <span style={{fontSize:11,background:"#ccc",color:"#666",borderRadius:10,padding:"1px 8px",fontWeight:700}}>
+          {expanded?"Colapsar":"Ver detalle"}
+        </span>
+      </button>
+
+      {expanded && (
+        <div style={{border:"1px solid #d0cdc8",borderTop:"none",borderRadius:"0 0 8px 8px",padding:"10px",background:"#f5f3ee",display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>
+          {days.map(d=>{
+            const dow   = getDOW(month,d);
+            const fer   = isFeriado(month,d);
+            const dTasks = monthTasks(month,d);
+            return (
+              <div key={d}
+                style={{background:"#edecea",border:"1px solid #d0cdc8",borderLeft:dow===0?"3px solid #b0aea8":undefined,borderRadius:6,minHeight:70,padding:"5px 6px",opacity:.75,cursor:dupTarget?"crosshair":"default"}}
+                onClick={()=>{ if(dupTarget) handleDupClick(d); }}
+              >
+                <div style={{fontFamily:"monospace",fontWeight:700,fontSize:11.5,color:"#999",marginBottom:3,display:"flex",alignItems:"center",gap:4}}>
+                  {d}
+                  <span style={{fontSize:9,color:"#bbb",fontWeight:500}}>{DOWLABELS[dow]}</span>
+                  {fer&&<span style={{fontSize:8,color:"#bbb",fontStyle:"italic"}}>{fer.label.split(" ")[0]}</span>}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                  {dTasks.map(task=>(
+                    <TaskChip key={task.id} task={task} hasComment={!!(comments[task.id]?.length)}
+                      draggable={false} onDragStart={()=>{}} onDragEnd={()=>{}}
+                      onClick={e=>{e.stopPropagation();if(!dupTarget)setActiveTask(task);}}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// NOTIF PANEL
+// ─────────────────────────────────────────────
+function NotifPanel({notifs, onClose, onMarkRead, onMarkAll}) {
+  const unread = notifs.filter(n=>!n.read).length;
+  const typeIcon = (type) => type==="nueva_tarea"?"📋":"👤";
+  const timeAgo = (ts) => {
+    const diff = Date.now() - new Date(ts).getTime();
+    const mins = Math.floor(diff/60000);
+    if(mins<1) return "ahora";
+    if(mins<60) return `${mins}m`;
+    const hrs = Math.floor(mins/60);
+    if(hrs<24) return `${hrs}h`;
+    return `${Math.floor(hrs/24)}d`;
+  };
+  const creatorName = (uid) => {
+    const u = USERS.find(u=>u.id===uid);
+    return u ? u.name.split(" ")[0] : uid;
+  };
+  return (
+    <div style={{position:"absolute",top:46,right:-10,width:320,background:"white",borderRadius:10,boxShadow:"0 8px 32px rgba(0,0,0,.18)",zIndex:200,overflow:"hidden",border:"1px solid #e0ddd8"}}>
+      <div style={{background:"#1a2f63",color:"white",padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontWeight:700,fontSize:13}}>Notificaciones {unread>0&&<span style={{background:"#e34948",borderRadius:10,padding:"1px 7px",fontSize:10,marginLeft:4}}>{unread}</span>}</span>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          {unread>0&&<button onClick={onMarkAll} style={{background:"rgba(255,255,255,.15)",border:"none",color:"white",fontSize:10,padding:"2px 8px",borderRadius:5,cursor:"pointer"}}>Marcar todas leídas</button>}
+          <button onClick={onClose} style={{background:"none",border:"none",color:"white",cursor:"pointer",fontSize:16,lineHeight:1}}>×</button>
+        </div>
+      </div>
+      <div style={{maxHeight:360,overflowY:"auto"}}>
+        {notifs.length===0 && (
+          <div style={{padding:"24px 16px",textAlign:"center",color:"#aaa",fontSize:13}}>Sin notificaciones</div>
+        )}
+        {notifs.map(n=>(
+          <div key={n.id} onClick={()=>!n.read&&onMarkRead(n.id)}
+            style={{padding:"10px 14px",borderBottom:"1px solid #f0ede8",background:n.read?"white":"#f0f4ff",cursor:n.read?"default":"pointer",display:"flex",gap:10,alignItems:"flex-start"}}>
+            <span style={{fontSize:18,flexShrink:0,marginTop:1}}>{typeIcon(n.type)}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12.5,color:"#272a33",lineHeight:1.4}}>{n.message}</div>
+              <div style={{fontSize:11,color:"#aaa",marginTop:3,display:"flex",justifyContent:"space-between"}}>
+                <span>De: {creatorName(n.created_by)}</span>
+                <span>{timeAgo(n.created_at)}</span>
+              </div>
+            </div>
+            {!n.read && <span style={{width:8,height:8,borderRadius:"50%",background:"#1a2f63",flexShrink:0,marginTop:5}}/>}
+          </div>
+        ))}
       </div>
     </div>
   );
