@@ -17,7 +17,7 @@ const db = {
   getTasks:    ()=> sbFetch("/tasks?order=day.asc"),
   getComments: ()=> sbFetch("/comments?order=created_at.asc"),
   upsertTask:  (t)=> sbFetch("/tasks?on_conflict=id", {method:"POST",
-    body: JSON.stringify({id:t.id,day:t.day,month:t.month||7,type:t.type,title:t.title,resp:t.resp,notes:t.notes||null,fixed:!!t.fixed}),
+    body: JSON.stringify({id:t.id,day:t.day,month:t.month||7,type:t.type,title:t.title,resp:t.resp,notes:t.notes||null,fixed:!!t.fixed,status:t.status||"pendiente"}),
     headers:{...SB_H,"Prefer":"resolution=merge-duplicates,return=representation"}}),
   deleteTask:  (id)=> sbFetch(`/tasks?id=eq.${id}`, {method:"DELETE"}),
   addComment:  (taskId,uid,text)=> sbFetch("/comments",{method:"POST",body:JSON.stringify({task_id:taskId,user_id:uid,text})}),
@@ -27,6 +27,12 @@ const db = {
   addNotification:  (n)=> sbFetch("/notifications",{method:"POST",body:JSON.stringify(n)}),
   markRead:    (id)=> sbFetch(`/notifications?id=eq.${id}`,{method:"PATCH",body:JSON.stringify({read:true})}),
   markAllRead: (uid)=> sbFetch(`/notifications?user_id=eq.${uid}&read=eq.false`,{method:"PATCH",body:JSON.stringify({read:true})}),
+  // ── Pendientes ──
+  getPendientes: ()=> sbFetch("/pendientes?order=created_at.asc"),
+  upsertPendiente: (p)=> sbFetch("/pendientes?on_conflict=id", {method:"POST",
+    body: JSON.stringify({id:p.id, label:p.label, status:p.status, resp:p.resp, created_by:p.created_by||null}),
+    headers:{...SB_H,"Prefer":"resolution=merge-duplicates,return=representation"}}),
+  deletePendiente: (id)=> sbFetch(`/pendientes?id=eq.${id}`, {method:"DELETE"}),
 };
 
 // ─────────────────────────────────────────────
@@ -133,7 +139,8 @@ const INITIAL_TASKS = [
   {id:"t13", month:7, day:3,  type:"precierre",  title:"Pre-cierre",                             resp:["edu","bas","iso"], fixed:true},
   {id:"t14", month:7, day:3,  type:"rutina",     title:"Control Cajas",                          resp:["iso"], fixed:true},
   {id:"t15", month:7, day:3,  type:"rutina",     title:"Ley de Urgencia",                        resp:["dan"], fixed:true},
-  {id:"t16", month:7, day:6,  type:"cuad",       title:"Cuadratura y apertura ICEO",             resp:["joa","iso"]},
+  {id:"t16", month:7, day:6,  type:"rutina", title:"Cuadratura y apertura ICEO", resp:["joa","iso"], fixed:true},
+  {id:"t16b",month:7, day:6,  type:"rutina", title:"Carga week",                  resp:["iso"],       fixed:true},
   {id:"t17", month:7, day:6,  type:"precierre",  title:"Pre-cierre",                             resp:["edu","bas","iso"]},
   {id:"t18", month:7, day:6,  type:"capex",      title:"Levantamiento final CAPEX (interno)",    resp:["dan"]},
   {id:"t19", month:7, day:6,  type:"rutina",     title:"Ley de Urgencia",                        resp:["dan"], fixed:true},
@@ -156,7 +163,8 @@ const INITIAL_TASKS = [
   {id:"t36", month:7, day:10, type:"hito",       title:"Plazo final CAPEX — clínica",            resp:["dan"]},
   {id:"t37", month:7, day:10, type:"rutina",     title:"Control Cajas",                          resp:["iso"], fixed:true},
   {id:"t38", month:7, day:10, type:"rutina",     title:"Ley de Urgencia",                        resp:["dan"], fixed:true},
-  {id:"t39", month:7, day:13, type:"cuad",       title:"Cuadratura y apertura ICEO",             resp:["joa","iso"]},
+  {id:"t39", month:7, day:13, type:"rutina", title:"Cuadratura y apertura ICEO", resp:["joa","iso"], fixed:true},
+  {id:"t39b",month:7, day:13, type:"rutina", title:"Carga week",                  resp:["iso"],       fixed:true},
   {id:"t40", month:7, day:13, type:"rutina",     title:"Ley de Urgencia",                        resp:["dan"], fixed:true},
   {id:"t41", month:7, day:14, type:"iceo",       title:"Revisión ICEO — Financiera + CG",        resp:["leo"]},
   {id:"t42", month:7, day:14, type:"rutina",     title:"Capex matriz",                           resp:["dan"], fixed:true},
@@ -168,7 +176,8 @@ const INITIAL_TASKS = [
   {id:"t48", month:7, day:15, type:"rutina",     title:"Ley de Urgencia",                        resp:["dan"], fixed:true},
   {id:"t49", month:7, day:17, type:"rutina",     title:"Control Cajas",                          resp:["iso"], fixed:true},
   {id:"t50", month:7, day:17, type:"rutina",     title:"Ley de Urgencia",                        resp:["dan"], fixed:true},
-  {id:"t51", month:7, day:20, type:"cuad",       title:"Cuadratura y apertura ICEO",             resp:["joa","iso"]},
+  {id:"t51", month:7, day:20, type:"rutina", title:"Cuadratura y apertura ICEO", resp:["joa","iso"], fixed:true},
+  {id:"t51b",month:7, day:20, type:"rutina", title:"Carga week",                  resp:["iso"],       fixed:true},
   {id:"t52", month:7, day:20, type:"hito",       title:"Cuadratura cuentas por cobrar",          resp:["bas"]},
   {id:"t53", month:7, day:20, type:"rutina",     title:"Ley de Urgencia",                        resp:["dan"], fixed:true},
   {id:"t54", month:7, day:21, type:"iceo",       title:"Revisión ICEO — Soporte + Personas",     resp:["joa"]},
@@ -185,7 +194,8 @@ const INITIAL_TASKS = [
   {id:"t65", month:7, day:23, type:"rutina",     title:"Ley de Urgencia",                        resp:["dan"], fixed:true},
   {id:"t66", month:7, day:24, type:"rutina",     title:"Control Cajas",                          resp:["iso"], fixed:true},
   {id:"t67", month:7, day:24, type:"rutina",     title:"Ley de Urgencia",                        resp:["dan"], fixed:true},
-  {id:"t68", month:7, day:27, type:"cuad",       title:"Cuadratura y apertura ICEO",             resp:["joa","iso"]},
+  {id:"t68", month:7, day:27, type:"rutina", title:"Cuadratura y apertura ICEO", resp:["joa","iso"], fixed:true},
+  {id:"t68b",month:7, day:27, type:"rutina", title:"Carga week",                  resp:["iso"],       fixed:true},
   {id:"t69", month:7, day:27, type:"rutina",     title:"Ley de Urgencia",                        resp:["dan"], fixed:true},
   {id:"t70", month:7, day:28, type:"iceo",       title:"Revisión ICEO — Comercial + Marketing",  resp:["bas","dan"]},
   {id:"t71", month:7, day:28, type:"rutina",     title:"Capex matriz",                           resp:["dan"], fixed:true},
@@ -236,46 +246,46 @@ const INITIAL_TASKS = [
 // ROADMAP DATA
 // ─────────────────────────────────────────────
 const ROADMAP = [
-  { month:"JULIO 2026", color:"#1a2f63", items:[
-    {date:"06 jul", bg:"#b9711b", label:"Levantamiento final CAPEX (interno)", desc:"Cierre del trabajo interno del equipo, previo al plazo de la clínica. Responsable: Daniela Riffo."},
-    {date:"07 jul", bg:"#2e6b3a", label:"Lanzamiento PPA", desc:"Responsables: Eduardo Morales y Leonardo Ortiz."},
-    {date:"08 jul", bg:"#1a2f63", label:"Cierre de mes + avance carta auditores", desc:"Provisión contable consolidada con indicadores; revisión de control interno. Responsables: Bastián Retamal y Leonardo Ortiz."},
-    {date:"08 jul", bg:"#3b4d8c", label:"Oferta Consulta Médica y Quirúrgica", desc:"Responsables: Isidora Sepúlveda y Leonardo Ortiz."},
-    {date:"10 jul", bg:"#b9711b", label:"Plazo final CAPEX — clínica", desc:"Fecha límite definida por la clínica para la entrega. Responsable: Daniela Riffo."},
-    {date:"15 jul", bg:"#3b4d8c", label:"Ticket Médico Quirúrgico", desc:"Resp. Isidora. Cirugía general, cardiología, traumatología, otorrino."},
-    {date:"22 jul", bg:"#3b4d8c", label:"Análisis de oferta oncológica", desc:"Responsable: Leonardo Ortiz."},
-    {date:"30 jul", bg:"#8a2438", label:"Comité — sí presentamos", desc:"Responsables: Bastián Retamal y Leonardo Ortiz."},
-    {date:"31 jul", bg:"#a3265c", label:"Reporte Mensual ILC", desc:"Responsable: Bastián Retamal."},
+  { month:"JULIO 2026", monthNum:7, color:"#1a2f63", items:[
+    {date:"06 jul", day:6,  monthNum:7, bg:"#b9711b", label:"Levantamiento final CAPEX (interno)", desc:"Cierre del trabajo interno del equipo, previo al plazo de la clínica. Responsable: Daniela Riffo."},
+    {date:"07 jul", day:7,  monthNum:7, bg:"#2e6b3a", label:"Lanzamiento PPA", desc:"Responsables: Eduardo Morales y Leonardo Ortiz."},
+    {date:"08 jul", day:8,  monthNum:7, bg:"#1a2f63", label:"Cierre de mes + avance carta auditores", desc:"Provisión contable consolidada con indicadores; revisión de control interno. Responsables: Bastián Retamal y Leonardo Ortiz."},
+    {date:"08 jul", day:8,  monthNum:7, bg:"#3b4d8c", label:"Oferta Consulta Médica y Quirúrgica", desc:"Responsables: Isidora Sepúlveda y Leonardo Ortiz."},
+    {date:"10 jul", day:10, monthNum:7, bg:"#b9711b", label:"Plazo final CAPEX — clínica", desc:"Fecha límite definida por la clínica para la entrega. Responsable: Daniela Riffo."},
+    {date:"15 jul", day:15, monthNum:7, bg:"#3b4d8c", label:"Ticket Médico Quirúrgico", desc:"Resp. Isidora. Cirugía general, cardiología, traumatología, otorrino."},
+    {date:"22 jul", day:22, monthNum:7, bg:"#3b4d8c", label:"Análisis de oferta oncológica", desc:"Responsable: Leonardo Ortiz."},
+    {date:"30 jul", day:30, monthNum:7, bg:"#8a2438", label:"Comité — sí presentamos", desc:"Responsables: Bastián Retamal y Leonardo Ortiz."},
+    {date:"31 jul", day:31, monthNum:7, bg:"#a3265c", label:"Reporte Mensual ILC", desc:"Responsable: Bastián Retamal."},
   ]},
-  { month:"AGOSTO 2026", color:"#1d6b53", items:[
-    {date:"01 ago →", bg:"#5b3f8c", label:"Inicio Presupuesto Clínica 2027", desc:"Arranca el proceso anual, liderado por Control de Gestión.", span:true},
-    {date:"10 ago", bg:"#1d6b53", label:"Reunión de cierre", desc:"6° día hábil del mes."},
-    {date:"18 ago", bg:"#0e6e74", label:"Business Review — trimestral / YTD", desc:"Tercer martes. Revisión trimestral y acumulada del año."},
-    {date:"19 ago", bg:"#1a2f63", label:"Comité Financiero — Master Plan", desc:"Reagendado desde julio. Revisión del plan maestro de inversión."},
-    {date:"20 ago", bg:"#8a2438", label:"Comité — no presentamos", desc:"Penúltimo jueves del mes. No le corresponde a Control de Gestión exponer."},
-    {date:"31 ago", bg:"#2e6b3a", label:"PPA", desc:"Seguimiento del lanzamiento. Responsables: Eduardo Morales y Leonardo Ortiz."},
+  { month:"AGOSTO 2026", monthNum:8, color:"#1d6b53", items:[
+    {date:"01 ago →", day:1,  monthNum:8, bg:"#5b3f8c", label:"Inicio Presupuesto Clínica 2027", desc:"Arranca el proceso anual, liderado por Control de Gestión.", span:true},
+    {date:"10 ago",   day:10, monthNum:8, bg:"#1d6b53", label:"Reunión de cierre", desc:"6° día hábil del mes."},
+    {date:"18 ago",   day:18, monthNum:8, bg:"#0e6e74", label:"Business Review — trimestral / YTD", desc:"Tercer martes. Revisión trimestral y acumulada del año."},
+    {date:"19 ago",   day:19, monthNum:8, bg:"#1a2f63", label:"Comité Financiero — Master Plan", desc:"Reagendado desde julio. Revisión del plan maestro de inversión."},
+    {date:"20 ago",   day:20, monthNum:8, bg:"#8a2438", label:"Comité — no presentamos", desc:"Penúltimo jueves del mes. No le corresponde a Control de Gestión exponer."},
+    {date:"31 ago",   day:31, monthNum:8, bg:"#2e6b3a", label:"PPA", desc:"Seguimiento del lanzamiento. Responsables: Eduardo Morales y Leonardo Ortiz."},
   ]},
-  { month:"SEPTIEMBRE 2026", color:"#5b3f8c", items:[
-    {date:"08 sep", bg:"#1d6b53", label:"Reunión de cierre", desc:"6° día hábil del mes."},
-    {date:"24 sep", bg:"#8a2438", label:"Comité — sí presentamos", desc:"Le corresponde a Control de Gestión exponer."},
-    {date:"todo el mes", bg:"#5b3f8c", label:"Presupuesto Clínica 2027 — desarrollo", desc:"Construcción y validación, en paralelo al ritmo mensual.", span:true},
+  { month:"SEPTIEMBRE 2026", monthNum:9, color:"#5b3f8c", items:[
+    {date:"08 sep",      day:8,  monthNum:9, bg:"#1d6b53", label:"Reunión de cierre", desc:"6° día hábil del mes."},
+    {date:"24 sep",      day:24, monthNum:9, bg:"#8a2438", label:"Comité — sí presentamos", desc:"Le corresponde a Control de Gestión exponer."},
+    {date:"todo el mes", day:30, monthNum:9, bg:"#5b3f8c", label:"Presupuesto Clínica 2027 — desarrollo", desc:"Construcción y validación, en paralelo al ritmo mensual.", span:true},
   ]},
-  { month:"OCTUBRE 2026", color:"#b9711b", items:[
-    {date:"08 oct", bg:"#1d6b53", label:"Reunión de cierre", desc:"6° día hábil del mes."},
-    {date:"15 oct", bg:"#6b6f78", label:"1:1 — conversaciones uno a uno", desc:"Tercer jueves del mes."},
-    {date:"22 oct", bg:"#8a2438", label:"Comité — no presentamos", desc:"Penúltimo jueves del mes."},
-    {date:"todo el mes", bg:"#5b3f8c", label:"Presupuesto 2027 — desarrollo", desc:"Última etapa, previa al cierre de la 1ª semana de noviembre.", span:true},
+  { month:"OCTUBRE 2026", monthNum:10, color:"#b9711b", items:[
+    {date:"08 oct",      day:8,  monthNum:10, bg:"#1d6b53", label:"Reunión de cierre", desc:"6° día hábil del mes."},
+    {date:"15 oct",      day:15, monthNum:10, bg:"#6b6f78", label:"1:1 — conversaciones uno a uno", desc:"Tercer jueves del mes."},
+    {date:"22 oct",      day:22, monthNum:10, bg:"#8a2438", label:"Comité — no presentamos", desc:"Penúltimo jueves del mes."},
+    {date:"todo el mes", day:31, monthNum:10, bg:"#5b3f8c", label:"Presupuesto 2027 — desarrollo", desc:"Última etapa, previa al cierre de la 1ª semana de noviembre.", span:true},
   ]},
-  { month:"NOV · DIC 2026", color:"#8a2438", items:[
-    {date:"→ 06 nov", bg:"#5b3f8c", label:"Cierre Presupuesto Clínica 2027", desc:"Consolidación final en la primera semana de noviembre.", span:true},
-    {date:"09 nov", bg:"#1d6b53", label:"Reunión de cierre", desc:"6° día hábil de noviembre."},
-    {date:"17 nov", bg:"#0e6e74", label:"Business Review — trimestral / YTD", desc:"Tercer martes. Siguiente revisión tras la de agosto."},
-    {date:"19 nov", bg:"#8a2438", label:"Comité — sí presentamos", desc:"Penúltimo jueves del mes. Le corresponde a Control de Gestión exponer."},
-    {date:"30 nov", bg:"#a3265c", label:"🎂 Cumpleaños Daniela Riffo", desc:""},
-    {date:"01 dic", bg:"#1a2f63", label:"🎂 Cumpleaños Leonardo Ortiz", desc:""},
-    {date:"09 dic", bg:"#1d6b53", label:"Reunión de cierre", desc:"6° día hábil de diciembre."},
-    {date:"17 dic", bg:"#6b6f78", label:"1:1 — conversaciones uno a uno", desc:"Tercer jueves del mes. Última ronda del año."},
-    {date:"19 dic", bg:"#2e6b3a", label:"🎂 Cumpleaños Eduardo Morales", desc:""},
+  { month:"NOV · DIC 2026", monthNum:11, color:"#8a2438", items:[
+    {date:"→ 06 nov", day:6,  monthNum:11, bg:"#5b3f8c", label:"Cierre Presupuesto Clínica 2027", desc:"Consolidación final en la primera semana de noviembre.", span:true},
+    {date:"09 nov",   day:9,  monthNum:11, bg:"#1d6b53", label:"Reunión de cierre", desc:"6° día hábil de noviembre."},
+    {date:"17 nov",   day:17, monthNum:11, bg:"#0e6e74", label:"Business Review — trimestral / YTD", desc:"Tercer martes. Siguiente revisión tras la de agosto."},
+    {date:"19 nov",   day:19, monthNum:11, bg:"#8a2438", label:"Comité — sí presentamos", desc:"Penúltimo jueves del mes. Le corresponde a Control de Gestión exponer."},
+    {date:"30 nov",   day:30, monthNum:11, bg:"#a3265c", label:"🎂 Cumpleaños Daniela Riffo", desc:""},
+    {date:"01 dic",   day:1,  monthNum:12, bg:"#1a2f63", label:"🎂 Cumpleaños Leonardo Ortiz", desc:""},
+    {date:"09 dic",   day:9,  monthNum:12, bg:"#1d6b53", label:"Reunión de cierre", desc:"6° día hábil de diciembre."},
+    {date:"17 dic",   day:17, monthNum:12, bg:"#6b6f78", label:"1:1 — conversaciones uno a uno", desc:"Tercer jueves del mes. Última ronda del año."},
+    {date:"19 dic",   day:19, monthNum:12, bg:"#2e6b3a", label:"🎂 Cumpleaños Eduardo Morales", desc:""},
   ]},
 ];
 
@@ -328,6 +338,7 @@ export default function App() {
   const [menuOpen, setMenuOpen]     = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [pendientes, setPendientes] = useState([]);
   const mob = useIsMobile();
   const pollRef = useRef(null);
 
@@ -336,12 +347,20 @@ export default function App() {
   // ── Load ──
   async function loadFromDB(silent=false) {
     try {
-      const [rawT, rawC] = await Promise.all([db.getTasks(), db.getComments()]);
+      const [rawT, rawC, rawP] = await Promise.all([db.getTasks(), db.getComments(), db.getPendientes()]);
       if(rawT.length===0) {
         await db.seedTasks(INITIAL_TASKS);
         setTasks(INITIAL_TASKS);
       } else {
-        setTasks(rawT.map(t=>({...t, resp:Array.isArray(t.resp)?t.resp:(JSON.parse(t.resp||"[]"))})));
+        setTasks(rawT.map(t=>({...t, resp:Array.isArray(t.resp)?t.resp:(JSON.parse(t.resp||"[]")), status:t.status||"pendiente"})));
+      }
+      // Seed pendientes si están vacíos
+      if(rawP.length===0) {
+        const initial = PENDIENTES.map((p,i)=>({...p,id:`p${i}`,resp:p.resp||[],created_by:null}));
+        for(const p of initial) await db.upsertPendiente(p);
+        setPendientes(initial);
+      } else {
+        setPendientes(rawP.map(p=>({...p,resp:Array.isArray(p.resp)?p.resp:(JSON.parse(p.resp||"[]"))})));
       }
       const grouped = {};
       rawC.forEach(c=>{ if(!grouped[c.task_id]) grouped[c.task_id]=[]; grouped[c.task_id].push({uid:c.user_id,text:c.text,ts:new Date(c.created_at).getTime()}); });
@@ -349,7 +368,9 @@ export default function App() {
       if(!silent) setLoaded(true);
     } catch(e) {
       console.error(e);
-      setTasks(INITIAL_TASKS); setComments({});
+      setTasks(INITIAL_TASKS);
+      setPendientes(PENDIENTES.map((p,i)=>({...p,id:`p${i}`,resp:[]})));
+      setComments({});
       if(!silent) setLoaded(true);
     }
   }
@@ -485,6 +506,15 @@ export default function App() {
     setComments(prev=>({...prev,[taskId]:[...(prev[taskId]||[]),entry]}));
     try { await db.addComment(taskId,currentUser.id,text.trim()); } catch(e){console.error(e);}
   }
+
+  function toggleTaskStatus(taskId) {
+    const task = tasks.find(t=>t.id===taskId);
+    if(!task) return;
+    const newStatus = task.status==="listo" ? "pendiente" : "listo";
+    const updated = {...task, status:newStatus};
+    setTasks(prev=>prev.map(t=>t.id===taskId?updated:t));
+    persistTask(updated);
+  }
   async function resetData() {
     if(!window.confirm("¿Resetear todos los datos?")) return;
     setSyncStatus("saving");
@@ -511,7 +541,8 @@ export default function App() {
     {n:1, icon:"📅", label:"Calendario"},
     {n:2, icon:"🗺️", label:"Roadmap"},
     {n:3, icon:"⚠️", label:"Pendientes"},
-    {n:4, icon:"📋", label:"ICEO + PM"},
+    {n:4, icon:"🔒", label:"Cierre Mes"},
+    {n:5, icon:"📋", label:"ICEO + PM"},
   ];
 
   return (
@@ -594,12 +625,13 @@ export default function App() {
           dupTarget={dupTarget} setDupTarget={setDupTarget}
           onDrop={onDrop} handleDupClick={handleDupClick}
           addTask={addTask} setActiveTask={setActiveTask}
-          showToast={showToast}
+          showToast={showToast} toggleTaskStatus={toggleTaskStatus}
         />
       )}
       {page===2 && <RoadmapPage/>}
-      {page===3 && <PendientesPage/>}
-      {page===4 && <IceoPage/>}
+      {page===3 && <PendientesPage currentUser={currentUser} pendientes={pendientes} setPendientes={setPendientes}/>}
+      {page===4 && <CierreMesPage currentUser={currentUser}/>}
+      {page===5 && <IceoPage/>}
 
       {/* ── MOBILE BOTTOM NAV ── */}
       {mob && (
@@ -665,7 +697,7 @@ function useIsMobile() {
 // ─────────────────────────────────────────────
 // PAGE 1 — CALENDAR (mobile-first)
 // ─────────────────────────────────────────────
-function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth,monthTasks,filterType,setFilterType,filterResp,setFilterResp,showRutinas,setShowRutinas,dragSrc,setDragSrc,dragOver,setDragOver,dupTarget,setDupTarget,onDrop,handleDupClick,addTask,setActiveTask,showToast}) {
+function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth,monthTasks,filterType,setFilterType,filterResp,setFilterResp,showRutinas,setShowRutinas,dragSrc,setDragSrc,dragOver,setDragOver,dupTarget,setDupTarget,onDrop,handleDupClick,addTask,setActiveTask,showToast,toggleTaskStatus}) {
   const mob = useIsMobile();
   const m = MONTHS.find(x=>x.num===selectedMonth);
   const workDays = getWorkDays(selectedMonth);
@@ -826,6 +858,7 @@ function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth
                   {dTasks.map(task=>(
                     <TaskChipMobile key={task.id} task={task} hasComment={!!(comments[task.id]?.length)}
                       onClick={e=>{e.stopPropagation();if(!dupTarget)setActiveTask(task);}}
+                      onToggleStatus={toggleTaskStatus}
                     />
                   ))}
                 </div>
@@ -907,6 +940,7 @@ function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth
                         onDragStart={()=>setDragSrc(task.id)}
                         onDragEnd={()=>{setDragSrc(null);setDragOver(null);}}
                         onClick={e=>{e.stopPropagation();if(!dupTarget)setActiveTask(task);}}
+                        onToggleStatus={toggleTaskStatus}
                       />
                     ))}
                   </div>
@@ -937,68 +971,807 @@ function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth
 // ─────────────────────────────────────────────
 function RoadmapPage() {
   const mob = useIsMobile();
+  const [showPast, setShowPast] = useState(false);
+  const [showSectionPasts, setShowSectionPasts] = useState({});
+  const NOW = new Date();
+  const todayMonth = NOW.getMonth()+1;
+  const todayDay   = NOW.getDate();
+
+  const isPastItem = (item) => {
+    if(item.monthNum < todayMonth) return true;
+    if(item.monthNum === todayMonth && item.day < todayDay) return true;
+    return false;
+  };
+  const isSectionAllPast = (section) => section.items.every(item=>isPastItem(item));
+
+  const pastSections  = ROADMAP.filter(s=>isSectionAllPast(s));
+  const activeSections = ROADMAP.filter(s=>!isSectionAllPast(s));
+
+  const renderItem = (item, ii) => {
+    const past = isPastItem(item);
+    return (
+      <div key={ii} style={{display:"flex",gap:8,alignItems:"flex-start",
+        background:past?"#f0ede8":item.span?"#f0ebfa":"#fafaf8",
+        border:`1px solid ${past?"#e0dbd4":item.span?"#d8c9ef":"#ebebeb"}`,
+        borderRadius:7,padding:mob?"8px 10px":"9px 12px",
+        opacity:past?0.65:1,
+      }}>
+        <span style={{fontFamily:"monospace",fontWeight:700,fontSize:9.5,color:past?"#aaa":"white",
+          background:past?"#ddd":item.bg,
+          borderRadius:5,padding:"3px 6px",whiteSpace:"nowrap",flexShrink:0,height:"fit-content",marginTop:1,
+          textDecoration:past?"line-through":undefined,
+        }}>{item.date}</span>
+        <div>
+          <div style={{fontWeight:700,fontSize:mob?12:12.5,
+            color:past?"#aaa":item.span?"#5b3f8c":"#1a2f63",
+            textDecoration:past?"line-through":undefined,
+            marginBottom:item.desc?2:0}}>{item.label}</div>
+          {item.desc && !past && <div style={{fontSize:10.5,color:"#777",lineHeight:1.4}}>{item.desc}</div>}
+        </div>
+        {past && <span style={{marginLeft:"auto",flexShrink:0,fontSize:9,background:"#e8e5e0",color:"#aaa",borderRadius:10,padding:"1px 7px",fontWeight:700,height:"fit-content",marginTop:2}}>realizado</span>}
+      </div>
+    );
+  };
+
   return (
-    <div style={{padding: mob?"12px 12px 70px":"24px 32px 60px", maxWidth:1200, margin:"0 auto"}}>
+    <div style={{padding:mob?"12px 12px 70px":"24px 32px 60px",maxWidth:1200,margin:"0 auto"}}>
       <div style={{fontFamily:"monospace",fontSize:10,fontWeight:700,letterSpacing:.14,textTransform:"uppercase",color:"#5b5f6b",marginBottom:5}}>Control de Gestión · Visión hacia adelante</div>
       <div style={{fontWeight:800,fontSize:mob?20:26,color:"#1a2f63",marginBottom:4}}>Roadmap <span style={{color:"#8a2438"}}>Jul – Dic 2026</span></div>
-      <div style={{fontSize:12,color:"#5b5f6b",marginBottom:20}}>Hitos relevantes del segundo semestre.</div>
-      <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:mob?12:24}}>
-        {ROADMAP.map((section,si)=>(
-          <div key={si} style={{background:"white",borderRadius:10,border:"1px solid #dad6cc",overflow:"hidden"}}>
-            <div style={{background:section.color,color:"white",padding:"9px 14px",fontFamily:"monospace",fontWeight:700,fontSize:mob?11:12,letterSpacing:.1,textTransform:"uppercase"}}>
-              ● {section.month}
-            </div>
-            <div style={{padding:mob?"10px":"12px 14px",display:"flex",flexDirection:"column",gap:7}}>
-              {section.items.map((item,ii)=>(
-                <div key={ii} style={{display:"flex",gap:8,alignItems:"flex-start",background:item.span?"#f0ebfa":"#fafaf8",border:`1px solid ${item.span?"#d8c9ef":"#ebebeb"}`,borderRadius:7,padding:mob?"8px 10px":"9px 12px"}}>
-                  <span style={{fontFamily:"monospace",fontWeight:700,fontSize:9.5,color:"white",background:item.bg,borderRadius:5,padding:"3px 6px",whiteSpace:"nowrap",flexShrink:0,height:"fit-content",marginTop:1}}>{item.date}</span>
-                  <div>
-                    <div style={{fontWeight:700,fontSize:mob?12:12.5,color:item.span?"#5b3f8c":"#1a2f63",marginBottom:item.desc?2:0}}>{item.label}</div>
-                    {item.desc && <div style={{fontSize:10.5,color:"#777",lineHeight:1.4}}>{item.desc}</div>}
+      <div style={{fontSize:12,color:"#5b5f6b",marginBottom:16}}>Hitos relevantes del segundo semestre.</div>
+
+      {/* Hitos pasados colapsados */}
+      {pastSections.length>0 && (
+        <div style={{marginBottom:16}}>
+          <button onClick={()=>setShowPast(s=>!s)}
+            style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"8px 14px",background:"#edecea",border:"1px solid #d0cdc8",borderRadius:showPast?"8px 8px 0 0":8,cursor:"pointer",textAlign:"left"}}>
+            <span style={{fontSize:11,fontFamily:"monospace",fontWeight:700,color:"#888"}}>{showPast?"▲":"▼"}</span>
+            <span style={{fontSize:12.5,fontWeight:700,color:"#888"}}>
+              Hitos pasados ({pastSections.map(s=>s.month).join(", ")})
+            </span>
+            <span style={{marginLeft:"auto",fontSize:11,color:"#aaa"}}>
+              {pastSections.reduce((a,s)=>a+s.items.length,0)} hitos realizados
+            </span>
+            <span style={{fontSize:11,background:"#ccc",color:"#666",borderRadius:10,padding:"1px 8px",fontWeight:700}}>
+              {showPast?"Colapsar":"Ver detalle"}
+            </span>
+          </button>
+          {showPast && (
+            <div style={{border:"1px solid #d0cdc8",borderTop:"none",borderRadius:"0 0 8px 8px",background:"#f8f6f2",padding:mob?"10px":"12px",display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:mob?10:16}}>
+              {pastSections.map((section,si)=>(
+                <div key={si} style={{background:"white",borderRadius:8,border:"1px solid #e0ddd8",overflow:"hidden",opacity:.8}}>
+                  <div style={{background:"#aaa",color:"white",padding:"7px 12px",fontFamily:"monospace",fontWeight:700,fontSize:mob?10:11,letterSpacing:.1,textTransform:"uppercase",display:"flex",alignItems:"center",gap:8}}>
+                    ✓ {section.month}
+                  </div>
+                  <div style={{padding:"8px 10px",display:"flex",flexDirection:"column",gap:6}}>
+                    {section.items.map((item,ii)=>renderItem(item,ii))}
                   </div>
                 </div>
               ))}
             </div>
-          </div>
-        ))}
+          )}
+        </div>
+      )}
+
+      {/* Secciones activas y futuras */}
+      <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:mob?12:20}}>
+        {activeSections.map((section,si)=>{
+          const pastItems   = section.items.filter(item=>isPastItem(item));
+          const activeItems = section.items.filter(item=>!isPastItem(item));
+          const showSectionPast = !!showSectionPasts[si];
+          return (
+            <div key={si} style={{background:"white",borderRadius:10,border:"1px solid #dad6cc",overflow:"hidden"}}>
+              <div style={{background:section.color,color:"white",padding:"9px 14px",fontFamily:"monospace",fontWeight:700,fontSize:mob?11:12,letterSpacing:.1,textTransform:"uppercase"}}>
+                ● {section.month}
+              </div>
+              <div style={{padding:mob?"10px":"12px 14px",display:"flex",flexDirection:"column",gap:7}}>
+                {pastItems.length>0 && (
+                  <div>
+                    <button onClick={()=>setShowSectionPasts(s=>({...s,[si]:!s[si]}))}
+                      style={{width:"100%",display:"flex",alignItems:"center",gap:7,padding:"5px 8px",background:"#f0ede8",border:"1px solid #ddd",borderRadius:6,cursor:"pointer",fontSize:11,color:"#aaa",fontWeight:700}}>
+                      <span>{showSectionPast?"▲":"▼"}</span>
+                      <span>{pastItems.length} hito{pastItems.length>1?"s":""} pasado{pastItems.length>1?"s":""}</span>
+                      <span style={{marginLeft:"auto",fontSize:10}}>{showSectionPast?"ocultar":"ver"}</span>
+                    </button>
+                    {showSectionPast && (
+                      <div style={{display:"flex",flexDirection:"column",gap:5,marginTop:5}}>
+                        {pastItems.map((item,ii)=>renderItem(item,ii))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {activeItems.map((item,ii)=>renderItem(item,ii))}
+              </div>
+            </div>
+          );
+        })}
       </div>
+      <div style={{marginTop:14,fontSize:11,color:"#aaa",textAlign:"right",fontFamily:"monospace"}}>Control de Gestión · v4</div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────
-// PAGE 3 — PENDIENTES
+// PAGE 3 — PENDIENTES (interactivo)
 // ─────────────────────────────────────────────
-function PendientesPage() {
+const STATUS_CONFIG = {
+  "por iniciar": {bg:"#f6e3e6", color:"#8a2438", border:"#d4a0a8"},
+  "en ajuste":   {bg:"#f7ead4", color:"#b9711b", border:"#e0c080"},
+  "listo":       {bg:"#e4f0ea", color:"#1d6b53", border:"#a0d0b0"},
+  "no válido":   {bg:"#e8e8e8", color:"#888",    border:"#ccc"},
+};
+const STATUS_OPTIONS = ["por iniciar","en ajuste","listo","no válido"];
+
+function PendientesPage({currentUser, pendientes, setPendientes}) {
   const mob = useIsMobile();
+  const [editId, setEditId]   = useState(null);
+  const [showNew, setShowNew] = useState(false);
+  const [newItem, setNewItem] = useState({label:"",status:"por iniciar",resp:[]});
+  const [saving, setSaving]   = useState(false);
+
+  async function saveEdit(id) {
+    const p = pendientes.find(x=>x.id===id);
+    if(!p) return;
+    setSaving(true);
+    try { await db.upsertPendiente(p); } catch(e){console.error(e);}
+    setSaving(false);
+    setEditId(null);
+  }
+
+  async function addNew() {
+    if(!newItem.label.trim()) return;
+    const p = {...newItem, id:`p${Date.now()}`, created_by:currentUser?.id||null};
+    setSaving(true);
+    try {
+      await db.upsertPendiente(p);
+      setPendientes(prev=>[...prev,p]);
+    } catch(e){console.error(e);}
+    setSaving(false);
+    setNewItem({label:"",status:"por iniciar",resp:[]});
+    setShowNew(false);
+  }
+
+  async function deleteItem(id) {
+    if(!window.confirm("¿Eliminar este pendiente?")) return;
+    try {
+      await db.deletePendiente(id);
+      setPendientes(prev=>prev.filter(p=>p.id!==id));
+    } catch(e){console.error(e);}
+  }
+
+  const statusBadge = (status) => {
+    const c = STATUS_CONFIG[status] || STATUS_CONFIG["por iniciar"];
+    return (
+      <span style={{fontFamily:"monospace",fontSize:9,fontWeight:700,textTransform:"uppercase",
+        letterSpacing:.05,padding:"3px 8px",borderRadius:20,whiteSpace:"nowrap",flexShrink:0,
+        background:c.bg,color:c.color,border:`1px solid ${c.border}`,
+        textDecoration:status==="no válido"?"line-through":undefined}}>
+        {status}
+      </span>
+    );
+  };
+
   return (
-    <div style={{padding: mob?"12px 12px 70px":"24px 32px 60px", maxWidth:900, margin:"0 auto"}}>
-      <div style={{fontFamily:"monospace",fontSize:10,fontWeight:700,letterSpacing:.14,textTransform:"uppercase",color:"#5b5f6b",marginBottom:5}}>Control de Gestión · Solo visualización</div>
+    <div style={{padding:mob?"12px 12px 70px":"24px 32px 60px",maxWidth:900,margin:"0 auto"}}>
+      <div style={{fontFamily:"monospace",fontSize:10,fontWeight:700,letterSpacing:.14,textTransform:"uppercase",color:"#5b5f6b",marginBottom:5}}>Control de Gestión</div>
       <div style={{fontWeight:800,fontSize:mob?20:26,color:"#1a2f63",marginBottom:4}}>⚠️ Pendientes <span style={{color:"#8a2438"}}>estratégicos</span></div>
-      <div style={{fontSize:12,color:"#5b5f6b",marginBottom:20}}>Para modificar este listado, contactar a Leonardo o Bastián.</div>
-      <div style={{background:"white",borderRadius:10,border:"1px solid #dad6cc",overflow:"hidden"}}>
-        <div style={{background:"#1a2f63",color:"white",padding:"11px 16px",fontWeight:800,fontSize:mob?13:14}}>📋 Listado de pendientes importantes</div>
-        {PENDIENTES.map((p,i)=>(
-          <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding: mob?"12px 14px":"14px 20px",borderBottom:i<PENDIENTES.length-1?"1px dashed #ebebeb":undefined,background:i%2===0?"#fafaf8":"white"}}>
-            <span style={{fontFamily:"monospace",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:.05,padding:"3px 8px",borderRadius:20,whiteSpace:"nowrap",flexShrink:0,marginTop:1,
-              background:p.status==="en ajuste"?"#f7ead4":p.status==="listo"?"#e4f0ea":p.status==="no válido"?"#e8e8e8":"#f6e3e6",
-              color:p.status==="en ajuste"?"#b9711b":p.status==="listo"?"#1d6b53":p.status==="no válido"?"#888":"#8a2438",
-              border:`1px solid ${p.status==="en ajuste"?"#e0c080":p.status==="listo"?"#a0d0b0":p.status==="no válido"?"#ccc":"#d4a0a8"}`,
-              textDecoration:p.status==="no válido"?"line-through":undefined,
-            }}>{p.status}</span>
-            <span style={{fontSize:mob?13:13.5,color:"#272a33",fontWeight:500,lineHeight:1.4}}>{p.label}</span>
+      <div style={{fontSize:12,color:"#5b5f6b",marginBottom:16}}>Todos pueden agregar y editar pendientes. Los cambios se guardan en tiempo real.</div>
+
+      <div style={{background:"white",borderRadius:10,border:"1px solid #dad6cc",overflow:"hidden",marginBottom:16}}>
+        {/* Header */}
+        <div style={{background:"#1a2f63",color:"white",padding:"11px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span style={{fontWeight:800,fontSize:mob?13:14}}>📋 Listado de pendientes ({pendientes.length})</span>
+          <button onClick={()=>setShowNew(true)}
+            style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.3)",color:"white",borderRadius:7,padding:"4px 12px",cursor:"pointer",fontSize:12,fontWeight:700}}>
+            + Nuevo
+          </button>
+        </div>
+
+        {/* Lista */}
+        {pendientes.length===0 && !showNew && (
+          <div style={{padding:"24px",textAlign:"center",color:"#aaa",fontSize:13}}>Sin pendientes. Agrega uno con el botón "+" arriba.</div>
+        )}
+
+        {pendientes.map((p,i)=>(
+          <div key={p.id} style={{borderBottom:i<pendientes.length-1?"1px dashed #ebebeb":undefined,background:i%2===0?"#fafaf8":"white"}}>
+            {editId===p.id ? (
+              <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:10}}>
+                <input value={p.label}
+                  onChange={e=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,label:e.target.value}:x))}
+                  style={{width:"100%",padding:"7px 10px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none"}}/>
+                <div>
+                  <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Estado</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                    {STATUS_OPTIONS.map(s=>{ const c=STATUS_CONFIG[s]; return (
+                      <button key={s} onClick={()=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,status:s}:x))}
+                        style={{padding:mob?"6px 11px":"3px 10px",borderRadius:20,border:`2px solid ${p.status===s?c.color:"#e0e0e0"}`,
+                          background:p.status===s?c.bg:"white",color:p.status===s?c.color:"#888",
+                          fontSize:mob?12:11,fontWeight:700,cursor:"pointer",minHeight:mob?34:undefined}}>
+                        {s}
+                      </button>
+                    );})}
+                  </div>
+                </div>
+                <div>
+                  <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Responsables</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                    {USERS.map(u=>{ const a=(p.resp||[]).includes(u.id); return (
+                      <button key={u.id}
+                        onClick={()=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,resp:a?x.resp.filter(r=>r!==u.id):[...(x.resp||[]),u.id]}:x))}
+                        style={{display:"flex",alignItems:"center",gap:4,padding:mob?"7px 11px":"4px 9px",borderRadius:20,border:`2px solid ${a?u.color:"#e0e0e0"}`,
+                          background:a?u.color+"18":"white",color:a?u.color:"#888",fontSize:mob?12.5:11,fontWeight:600,cursor:"pointer",minHeight:mob?38:undefined}}>
+                        <Avatar uid={u.id} size={mob?16:13}/>{u.name.split(" ")[0]}{a&&" ✓"}
+                      </button>
+                    );})}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                  <button onClick={()=>setEditId(null)} style={{background:"white",border:"1.5px solid #ccc",borderRadius:7,padding:"6px 14px",cursor:"pointer",fontSize:12}}>Cancelar</button>
+                  <button onClick={()=>saveEdit(p.id)} disabled={saving}
+                    style={{background:"#1a2f63",color:"white",border:"none",borderRadius:7,padding:"6px 16px",cursor:"pointer",fontSize:12,fontWeight:700,opacity:saving?.7:1}}>
+                    {saving?"Guardando...":"Guardar"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:mob?"10px 12px":"12px 16px"}}>
+                {statusBadge(p.status)}
+                <span style={{fontSize:mob?12.5:13,fontWeight:500,flex:1,lineHeight:1.4,
+                  textDecoration:p.status==="no válido"?"line-through":"none",
+                  color:p.status==="no válido"?"#aaa":"#272a33"}}>{p.label}</span>
+                {(p.resp||[]).length>0 && (
+                  <div style={{display:"flex",gap:2,flexShrink:0}}>
+                    {(p.resp||[]).map(uid=><Avatar key={uid} uid={uid} size={mob?20:18}/>)}
+                  </div>
+                )}
+                <div style={{display:"flex",gap:5,flexShrink:0}}>
+                  <button onClick={()=>setEditId(p.id)}
+                    style={{background:"#f0f4ff",border:"1px solid #c0d0f0",color:"#3b4d8c",borderRadius:6,padding:mob?"6px 11px":"3px 9px",cursor:"pointer",fontSize:mob?12:11,fontWeight:600,minHeight:mob?34:undefined}}>
+                    Editar
+                  </button>
+                  <button onClick={()=>deleteItem(p.id)}
+                    style={{background:"#fff0f0",border:"1px solid #f0c0c0",color:"#c0392b",borderRadius:6,padding:mob?"6px 10px":"3px 8px",cursor:"pointer",fontSize:mob?12:11,minHeight:mob?34:undefined}}>
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
-      </div>
-      <div style={{marginTop:16,background:"#f0ebfa",border:"1px solid #d8c9ef",borderRadius:8,padding:"12px 16px",fontSize:12,color:"#5b3f8c",lineHeight:1.6}}>
-        <strong>Nota:</strong> Esta lista es de solo lectura en la app. Para agregar, modificar o marcar como completado, coordinarse con el Subgerente de Control de Gestión.
+
+        {/* Formulario nuevo */}
+        {showNew && (
+          <div style={{padding:"14px 16px",background:"#f0f4ff",borderTop:"1px solid #c0d0f0",display:"flex",flexDirection:"column",gap:10}}>
+            <div style={{fontWeight:700,fontSize:13,color:"#1a2f63"}}>Nuevo pendiente</div>
+            <input value={newItem.label} onChange={e=>setNewItem(p=>({...p,label:e.target.value}))}
+              placeholder="Descripción del pendiente..."
+              style={{width:"100%",padding:mob?"10px 12px":"8px 11px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none"}}
+              autoFocus/>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Estado</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {STATUS_OPTIONS.map(s=>{ const c=STATUS_CONFIG[s]; return (
+                  <button key={s} onClick={()=>setNewItem(p=>({...p,status:s}))}
+                    style={{padding:mob?"6px 11px":"3px 10px",borderRadius:20,border:`2px solid ${newItem.status===s?c.color:"#e0e0e0"}`,
+                      background:newItem.status===s?c.bg:"white",color:newItem.status===s?c.color:"#888",
+                      fontSize:mob?12:11,fontWeight:700,cursor:"pointer",minHeight:mob?34:undefined}}>
+                    {s}
+                  </button>
+                );})}
+              </div>
+            </div>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Responsables</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {USERS.map(u=>{ const a=newItem.resp.includes(u.id); return (
+                  <button key={u.id} onClick={()=>setNewItem(p=>({...p,resp:a?p.resp.filter(r=>r!==u.id):[...p.resp,u.id]}))}
+                    style={{display:"flex",alignItems:"center",gap:4,padding:mob?"7px 11px":"4px 9px",borderRadius:20,border:`2px solid ${a?u.color:"#e0e0e0"}`,
+                      background:a?u.color+"18":"white",color:a?u.color:"#888",fontSize:mob?12.5:11,fontWeight:600,cursor:"pointer",minHeight:mob?38:undefined}}>
+                    <Avatar uid={u.id} size={mob?16:13}/>{u.name.split(" ")[0]}{a&&" ✓"}
+                  </button>
+                );})}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+              <button onClick={()=>{setShowNew(false);setNewItem({label:"",status:"por iniciar",resp:[]});}}
+                style={{background:"white",border:"1.5px solid #ccc",borderRadius:7,padding:"6px 14px",cursor:"pointer",fontSize:12}}>Cancelar</button>
+              <button onClick={addNew} disabled={saving||!newItem.label.trim()}
+                style={{background:newItem.label.trim()?"#1a2f63":"#aaa",color:"white",border:"none",borderRadius:7,padding:"6px 16px",cursor:newItem.label.trim()?"pointer":"default",fontSize:12,fontWeight:700}}>
+                {saving?"Guardando...":"Agregar"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────
-// PAGE 4 — ICEO + PM
+// PAGE 4 — CIERRE DE MES
+// ─────────────────────────────────────────────
+
+const ACTIVIDADES_CIERRE = [
+  {id:"c1",  fase:"descarga", bold:true,  titulo:"Carga de actividad y prestaciones de Pabellón en sistema al día", responsable:"Katherine Figueroa",       area:"Pabellón"},
+  {id:"c2",  fase:"descarga", bold:true,  titulo:"Provisión de pacientes acostados",                                  responsable:"Cecilia I. / Eduardo M.",   area:"Hospitalización"},
+  {id:"c3",  fase:"descarga", bold:false, titulo:"Envío Ajustes MEMO y cálculo distribución",                         responsable:"Daniela Araya",             area:"Contabilidad"},
+  {id:"c4",  fase:"descarga", bold:false, titulo:"Envío de consumo de servicios, ajustes de stocks, Farmacia VP y Eco",responsable:"Eduardo Morales",          area:"CdG"},
+  {id:"c5",  fase:"descarga", bold:false, titulo:"Envío de Liquidación de Centro Médico, Dental, Urgencias, Fertilidad, Poli.", responsable:"Macarena F. / Daniela M.", area:"Administración"},
+  {id:"c6",  fase:"descarga", bold:false, titulo:"Envío provisión costos con áreas MK, TI, Mantenciones para validación de cierre", responsable:"Joaquín P. / Daniela R.", area:"CdG"},
+  {id:"c7",  fase:"descarga", bold:true,  titulo:"Bases preliminar de Prestaciones, MEI y HM a fichas",              responsable:"Eduardo Morales",            area:"CdG"},
+  {id:"c8",  fase:"descarga", bold:true,  titulo:"Ingreso de HM x UEN",                                              responsable:"Isidora Sepúlveda",          area:"CdG"},
+  {id:"c9",  fase:"descarga", bold:false, titulo:"Cálculo y contabilización de GRD/GES/NoGes",                       responsable:"Isidora Sepúlveda",          area:"CdG"},
+  {id:"c10", fase:"descarga", bold:false, titulo:"Envío Informe Resumen CxC al cierre de Mes",                       responsable:"Francisca Montecinos",       area:"Cobranza"},
+  {id:"c11", fase:"descarga", bold:false, titulo:"Envío de estimación Turnos Méd. y distribución sueldos y gratif.", responsable:"Paula Coronado",             area:"RRHH"},
+  {id:"c12", fase:"descarga", bold:false, titulo:"Provisión Vacaciones y Finiquitos",                                 responsable:"Paula Coronado",             area:"RRHH"},
+  {id:"c13", fase:"carga",    bold:true,  titulo:"Entrega de Base Ingresos y Reval x Fichas y MEI del mes, y Comp Cont.", responsable:"Eduardo Morales",       area:"CdG",            turno:"AM"},
+  {id:"c14", fase:"carga",    bold:true,  titulo:"Centralización de remuneraciones",                                  responsable:"Paula Coronado",             area:"RRHH",           turno:"AM"},
+  {id:"c15", fase:"carga",    bold:true,  titulo:"Provisión proyección prestaciones y HM",                            responsable:"Bastián Retamal",            area:"CdG",            turno:"AM"},
+  {id:"c16", fase:"carga",    bold:false, titulo:"Cálculo final deterioro CxC",                                       responsable:"Isidora Sepúlveda",          area:"CdG"},
+  {id:"c17", fase:"carga",    bold:false, titulo:"Ingresos devengados y Contabilización Hemosan",                     responsable:"Eduardo M. / Paola V.",      area:"CdG"},
+  {id:"c18", fase:"carga",    bold:true,  titulo:"Consumo pacientes y provisión consumos",                            responsable:"Eduardo M. / Bastián R.",    area:"CdG"},
+  {id:"c19", fase:"carga",    bold:false, titulo:"Envío data indicadores RRHH",                                       responsable:"Paula Coronado",             area:"RRHH"},
+  {id:"c20", fase:"carga",    bold:false, titulo:"Envío de costos Turnos Médicos INFOGEST",                           responsable:"Paula C. / Fabiola M.",      area:"RRHH"},
+  {id:"c21", fase:"carga",    bold:false, titulo:"Cierre de Libros de compra y ventas, Determinación de IVA No Recuperable", responsable:"Contabilidad",       area:"Contabilidad"},
+  {id:"c22", fase:"carga",    bold:false, titulo:"Cierre de Bancos de todas las Sociedades",                          responsable:"Rodrigo Recabal",            area:"Tesorería"},
+  {id:"c23", fase:"carga",    bold:true,  titulo:"Entrega de Base Honorarios Médicos del mes en carpetas compartidas",responsable:"Margarita M. / Fabiola M.", area:"RRHH",           turno:"AM"},
+  {id:"c24", fase:"carga",    bold:false, titulo:"Flujo de efectivo",                                                 responsable:"Rodrigo Recabal",            area:"Tesorería",      turno:"PM"},
+  {id:"c25", fase:"eerr",     bold:false, titulo:"Cierre de Impuestos a la renta",                                    responsable:"Vania Larraín",              area:"Contabilidad",   turno:"AM"},
+  {id:"c26", fase:"eerr",     bold:false, titulo:"Cierre de VP",                                                      responsable:"Paola Valdebenito",          area:"Contabilidad",   turno:"AM"},
+  {id:"c27", fase:"eerr",     bold:true,  titulo:"Reunión Pre Cierre",                                                responsable:"RedSalud / Finanzas / Personas", area:"RedSalud",  turno:""},
+];
+
+// Datos de cierres pasados y futuros
+const CIERRES = [
+  {
+    mes:"Julio 2026", num:7, year:2026,
+    corteInicio:"26/06/2026", corteFin:"28/07/2026",
+    descarga:["Mié 29/07","Jue 30/07","Vie 31/07"],
+    carga:["Lun 03/08","Mar 04/08","Mié 05/08","Jue 06/08"],
+    pasado: false, actual: true,
+    nota:"Fecha de corte especial: incluye desde 26/06 por ajuste del cierre anterior."
+  },
+  {
+    mes:"Agosto 2026", num:8, year:2026,
+    corteInicio:"29/07/2026", corteFin:"27/08/2026",
+    descarga:["Jue 27/08","Vie 28/08","Lun 31/08"],
+    carga:["Mar 01/09","Mié 02/09","Jue 03/09","Vie 04/09"],
+    pasado: false, actual: false,
+  },
+  {
+    mes:"Septiembre 2026", num:9, year:2026,
+    corteInicio:"28/08/2026", corteFin:"28/09/2026",
+    descarga:["Lun 28/09","Mar 29/09","Mié 30/09"],
+    carga:["Jue 01/10","Vie 02/10","Lun 05/10","Mar 06/10"],
+    pasado: false, actual: false,
+  },
+  {
+    mes:"Octubre 2026", num:10, year:2026,
+    corteInicio:"29/09/2026", corteFin:"27/10/2026",
+    descarga:["Mié 28/10","Jue 29/10","Vie 30/10"],
+    carga:["Lun 02/11","Mar 03/11","Mié 04/11","Jue 05/11"],
+    pasado: false, actual: false,
+    nota:"31/10 es feriado (Día de las Iglesias Evangélicas), se excluye del cierre."
+  },
+  {
+    mes:"Noviembre 2026", num:11, year:2026,
+    corteInicio:"28/10/2026", corteFin:"25/11/2026",
+    descarga:["Jue 26/11","Vie 27/11","Lun 30/11"],
+    carga:["Mar 01/12","Mié 02/12","Jue 03/12","Vie 04/12"],
+    pasado: false, actual: false,
+  },
+];
+
+// Cierres ya realizados (para referencia histórica)
+const CIERRES_PASADOS = [
+  {
+    mes:"Enero 2026", num:1, year:2026,
+    corteInicio:"29/12/2025", corteFin:"27/01/2026",
+    descarga:["Mié 28/01","Jue 29/01","Vie 30/01"],
+    carga:["Lun 02/02","Mar 03/02","Mié 04/02","Jue 05/02"],
+    pasado:true,
+  },
+  {
+    mes:"Febrero 2026", num:2, year:2026,
+    corteInicio:"28/01/2026", corteFin:"24/02/2026",
+    descarga:["Mié 25/02","Jue 26/02","Vie 27/02"],
+    carga:["Lun 02/03","Mar 03/03","Mié 04/03","Jue 05/03"],
+    pasado:true,
+  },
+  {
+    mes:"Marzo 2026", num:3, year:2026,
+    corteInicio:"25/02/2026", corteFin:"26/03/2026",
+    descarga:["Vie 27/03","Lun 30/03","Mar 31/03"],
+    carga:["Mié 01/04","Jue 02/04","Lun 06/04","Mar 07/04"],
+    pasado:true,
+    nota:"3 y 4 de abril son Semana Santa (feriados), primer hábil es mié 01/04."
+  },
+  {
+    mes:"Abril 2026", num:4, year:2026,
+    corteInicio:"27/03/2026", corteFin:"27/04/2026",
+    descarga:["Mar 28/04","Mié 29/04","Jue 30/04"],
+    carga:["Lun 04/05","Mar 05/05","Mié 06/05","Jue 07/05"],
+    pasado:true,
+    nota:"1 de mayo es feriado, primer hábil del mes es lun 04/05."
+  },
+  {
+    mes:"Mayo 2026", num:5, year:2026,
+    corteInicio:"28/04/2026", corteFin:"26/05/2026",
+    descarga:["Mié 27/05","Jue 28/05","Vie 29/05"],
+    carga:["Lun 01/06","Mar 02/06","Mié 03/06","Jue 04/06"],
+    pasado:true,
+  },
+  {
+    mes:"Junio 2026", num:6, year:2026,
+    corteInicio:"27/05/2026", corteFin:"24/06/2026",
+    descarga:["Jue 25/06","Vie 26/06","Mar 30/06"],
+    carga:["Mié 01/07","Jue 02/07","Vie 03/07","Lun 06/07"],
+    pasado:true,
+    nota:"29/06 es feriado (San Pedro y San Pablo). 3° hábil salta al mar 30/06."
+  },
+];
+
+const FASE_CONFIG = {
+  descarga: {label:"Descarga y proyección", bg:"#1a2f63", fg:"white", light:"#dfe7f7", desc:"Últimos 3 días hábiles del mes: se carga actividad real y se proyectan días restantes"},
+  carga:    {label:"Reversa y carga real",  bg:"#1d6b53", fg:"white", light:"#e4f0ea", desc:"Primeros días hábiles del mes siguiente: se reversan proyecciones y se carga lo real"},
+  eerr:     {label:"EERR y Balance",        bg:"#5b3f8c", fg:"white", light:"#ece5f5", desc:"Cierre contable, impuestos y reunión pre-cierre con RedSalud"},
+};
+
+function CierreMesPage({currentUser}) {
+  const mob = useIsMobile();
+  // Todos los cierres juntos: pasados primero, luego futuros
+  const ALL_CIERRES = [...CIERRES_PASADOS, ...CIERRES];
+  const [selectedIdx, setSelectedIdx] = useState(CIERRES_PASADOS.length); // default = primer futuro (julio)
+
+  const cierre = ALL_CIERRES[selectedIdx];
+  const allDays = [...cierre.descarga, ...cierre.carga];
+
+  const getColBg = (d) => {
+    if (cierre.descarga.includes(d)) return '#1a2f63';
+    if (cierre.carga.slice(0,2).includes(d)) return '#1d6b53';
+    return '#5b3f8c';
+  };
+
+  const getActDays = (act) => {
+    const d = cierre.descarga;
+    const c = cierre.carga;
+    const map = {
+      c1:[d[0]], c2:[d[0]], c3:[d[0]],
+      c4:[d[1]], c5:[d[1]],
+      c6:[d[2]], c7:[d[2]], c8:[d[2]], c9:[d[2]], c10:[d[2]], c11:[d[2]], c12:[d[2]],
+      c13:[c[0]], c14:[c[0]], c15:[c[0]], c16:[c[0]], c17:[c[0]], c18:[c[0]], c19:[c[0]], c20:[c[0]], c21:[c[0]], c22:[c[0]],
+      c23:[c[1]], c24:[c[1]],
+      c25:[c[2]], c26:[c[2]],
+      c27:[c[3]],
+    };
+    return map[act.id] || [];
+  };
+
+  const FASE_COLORS = { descarga:'#1a2f63', carga:'#1d6b53', eerr:'#5b3f8c' };
+  const COL_W  = mob ? 52 : 80;
+  const LABEL_W= mob ? 160 : 360;
+  const RESP_W = mob ? 110 : 170;
+  const ROW_H  = mob ? 30 : 34;
+
+  // ── Descarga Excel ──
+  function downloadExcel(c) {
+    import('https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs').then(XLSX => {
+      const allDays = [...c.descarga, ...c.carga];
+      const getActDaysLocal = (num) => {
+        const d=c.descarga, g=c.carga;
+        const map={1:[d[0]],2:[d[0]],3:[d[0]],4:[d[1]],5:[d[1]],
+          6:[d[2]],7:[d[2]],8:[d[2]],9:[d[2]],10:[d[2]],11:[d[2]],12:[d[2]],
+          13:[g[0]],14:[g[0]],15:[g[0]],16:[g[0]],17:[g[0]],18:[g[0]],19:[g[0]],20:[g[0]],21:[g[0]],22:[g[0]],
+          23:[g[1]],24:[g[1]],25:[g[2]],26:[g[2]],27:[g[3]]};
+        return map[num]||[];
+      };
+      const getDayColor = (d) => {
+        if(c.descarga.includes(d)) return '1A2F63';
+        const idx=c.carga.indexOf(d);
+        return idx<2?'1D6B53':'5B3F8C';
+      };
+
+      const wb = XLSX.utils.book_new();
+      const ws = {};
+      const range = {s:{r:0,c:0}, e:{r:0,c:0}};
+
+      // Fila 0: fecha corte
+      const titleCell = { v:`FECHA CORTE AL ${c.corteFin} INCLUIDO (desde ${c.corteInicio})${c.nota?' | '+c.nota:''}`, t:'s',
+        s:{font:{italic:true,color:{rgb:'555555'},sz:9},fill:{fgColor:{rgb:'FFFFFF'}}} };
+      ws[XLSX.utils.encode_cell({r:0,c:0})] = titleCell;
+      ws['!merges'] = [{s:{r:0,c:0},e:{r:0,c:3+allDays.length}}];
+
+      // Fila 1: headers meses
+      let groups=[];
+      allDays.forEach((d,i)=>{
+        const mNum=parseInt(d.split('/')[1]);
+        const mLabel=['','ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'][mNum];
+        if(!groups.length||groups[groups.length-1].label!==mLabel)
+          groups.push({label:mLabel,count:1,startCol:4+i,col:getDayColor(d)});
+        else groups[groups.length-1].count++;
+      });
+
+      // Cabeceras fijas fila 1
+      ['Act.','Fecha','ACTIVIDAD','RESPONSABLE'].forEach((h,ci)=>{
+        ws[XLSX.utils.encode_cell({r:1,c:ci})]={v:h,t:'s',
+          s:{font:{bold:true,color:{rgb:'FFFFFF'},sz:9},fill:{fgColor:{rgb:'2E4057'}},
+             alignment:{horizontal:'center',vertical:'center'},border:{bottom:{style:'thin'}}}};
+      });
+
+      groups.forEach(g=>{
+        ws[XLSX.utils.encode_cell({r:1,c:g.startCol})]={v:g.label,t:'s',
+          s:{font:{bold:true,color:{rgb:'FFFFFF'},sz:10},fill:{fgColor:{rgb:g.col}},
+             alignment:{horizontal:'center',vertical:'center'}}};
+        if(g.count>1) (ws['!merges']=ws['!merges']||[]).push({s:{r:1,c:g.startCol},e:{r:1,c:g.startCol+g.count-1}});
+      });
+
+      // Fila 2: headers días
+      allDays.forEach((d,i)=>{
+        const parts=d.split(' ');
+        const bg=getDayColor(d);
+        ws[XLSX.utils.encode_cell({r:2,c:4+i})]={v:`${parts[1]}\n${parts[0]}`,t:'s',
+          s:{font:{bold:true,color:{rgb:'FFFFFF'},sz:8},fill:{fgColor:{rgb:bg}},
+             alignment:{horizontal:'center',vertical:'center',wrapText:true}}};
+      });
+
+      // Filas actividades
+      ACTIVIDADES_CIERRE.forEach((act,ai)=>{
+        const r=3+ai;
+        const actDays=getActDaysLocal(act.num||ai+1);
+        const rowBg=act.bold?'EEF0FB':'FFFFFF';
+        const textColor=act.bold?'1A2F63':'000000';
+
+        ws[XLSX.utils.encode_cell({r,c:0})]={v:ai+1,t:'n',
+          s:{font:{bold:act.bold,sz:9},fill:{fgColor:{rgb:rowBg}},alignment:{horizontal:'center',vertical:'center'}}};
+
+        const dayStr=actDays[0]?actDays[0].split(' ')[0]+'\n'+actDays[0].split(' ')[1]:'';
+        ws[XLSX.utils.encode_cell({r,c:1})]={v:dayStr,t:'s',
+          s:{font:{bold:act.bold,sz:8},fill:{fgColor:{rgb:rowBg}},alignment:{horizontal:'center',vertical:'center',wrapText:true}}};
+
+        ws[XLSX.utils.encode_cell({r,c:2})]={v:act.titulo,t:'s',
+          s:{font:{bold:act.bold,color:{rgb:textColor},sz:9.5},fill:{fgColor:{rgb:rowBg}},
+             alignment:{horizontal:'left',vertical:'center',wrapText:true}}};
+
+        ws[XLSX.utils.encode_cell({r,c:3})]={v:act.responsable,t:'s',
+          s:{font:{bold:act.bold,sz:9},fill:{fgColor:{rgb:rowBg}},
+             alignment:{horizontal:'left',vertical:'center'}}};
+
+        allDays.forEach((d,di)=>{
+          const active=actDays.includes(d);
+          const bg=active?getDayColor(d):rowBg;
+          const val=active&&act.turno?act.turno:'';
+          ws[XLSX.utils.encode_cell({r,c:4+di})]={v:val,t:'s',
+            s:{fill:{fgColor:{rgb:bg}},
+               font:{bold:true,color:{rgb:'FFFFFF'},sz:7},
+               alignment:{horizontal:'center',vertical:act.turno==='PM'?'bottom':'top'}}};
+        });
+
+        range.e.r=Math.max(range.e.r,r);
+      });
+
+      range.e.c = 3+allDays.length;
+      ws['!ref'] = XLSX.utils.encode_range(range);
+
+      // Anchos de columna
+      ws['!cols']=[{wch:5},{wch:9},{wch:52},{wch:24},...allDays.map(()=>({wch:8}))];
+      ws['!rows']=[{hpt:14},{hpt:18},{hpt:28},...ACTIVIDADES_CIERRE.map(()=>({hpt:28}))];
+
+      XLSX.utils.book_append_sheet(wb, ws, c.mes.substring(0,15));
+      XLSX.writeFile(wb, `Cierre_${c.mes.replace(' ','_')}.xlsx`);
+    });
+  }
+
+  return (
+    <div style={{padding:mob?'10px 8px 70px':'20px 24px 60px', maxWidth:1600, margin:'0 auto'}}>
+
+      {/* Header */}
+      <div style={{fontFamily:'monospace',fontSize:10,fontWeight:700,letterSpacing:.14,textTransform:'uppercase',color:'#5b5f6b',marginBottom:4}}>Control de Gestión · Proceso mensual</div>
+      <div style={{fontWeight:800,fontSize:mob?18:24,color:'#1a2f63',marginBottom:4}}>🔒 Cierre de Mes <span style={{color:'#8a2438'}}>2026</span></div>
+      <div style={{fontSize:12,color:'#5b5f6b',marginBottom:14,lineHeight:1.5,maxWidth:800}}>
+        Calendario de actividades para la elaboración del Informe de Gestión mensual. Los últimos 3 días hábiles se descarga y proyecta; al mes siguiente se reversan y carga lo real.
+      </div>
+
+      {/* Leyenda de fases */}
+      <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap'}}>
+        {[['#1a2f63','Descarga y proyección (últ. 3 hábiles del mes)'],
+          ['#1d6b53','Reversa y carga real (1°-2° hábil mes siguiente)'],
+          ['#5b3f8c','EERR, Balance y Reunión Pre Cierre']].map(([bg,label])=>(
+          <div key={bg} style={{display:'flex',alignItems:'center',gap:6,fontSize:11.5,color:'#555'}}>
+            <span style={{width:13,height:13,borderRadius:3,background:bg,display:'inline-block',flexShrink:0}}/>
+            {label}
+          </div>
+        ))}
+      </div>
+
+      {/* Selector — todos los meses */}
+      <div style={{marginBottom:14}}>
+        <div style={{fontSize:10.5,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:.07,marginBottom:7}}>
+          Meses pasados
+        </div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
+          {CIERRES_PASADOS.map((c,i)=>(
+            <button key={i} onClick={()=>setSelectedIdx(i)}
+              style={{padding:'5px 13px',borderRadius:20,
+                border:`2px solid ${selectedIdx===i?'#888780':'#e0ddd8'}`,
+                background:selectedIdx===i?'#888780':'#f5f3ee',
+                color:selectedIdx===i?'white':'#888',
+                fontWeight:700,fontSize:11.5,cursor:'pointer'}}>
+              ✓ {c.mes}
+            </button>
+          ))}
+        </div>
+        <div style={{fontSize:10.5,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:.07,marginBottom:7}}>
+          Meses activos y futuros
+        </div>
+        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          {CIERRES.map((c,i)=>{
+            const idx = CIERRES_PASADOS.length + i;
+            return (
+              <button key={i} onClick={()=>setSelectedIdx(idx)}
+                style={{padding:'5px 13px',borderRadius:20,
+                  border:`2px solid ${selectedIdx===idx?'#1a2f63':'#dad6cc'}`,
+                  background:selectedIdx===idx?'#1a2f63':'white',
+                  color:selectedIdx===idx?'white':'#555',
+                  fontWeight:700,fontSize:11.5,cursor:'pointer'}}>
+                {c.mes}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Banner del cierre seleccionado */}
+      <div style={{background:cierre.pasado?'#6b6f78':'#1a2f63',color:'white',borderRadius:8,
+        padding:'10px 16px',marginBottom:16,display:'flex',flexWrap:'wrap',gap:14,alignItems:'center'}}>
+        <div>
+          {cierre.pasado && <div style={{fontSize:9,opacity:.7,fontFamily:'monospace',textTransform:'uppercase',letterSpacing:.1,marginBottom:2}}>CIERRE REALIZADO</div>}
+          <div style={{fontWeight:800,fontSize:mob?13:16}}>Informe de Gestión — {cierre.mes}</div>
+        </div>
+        <div style={{borderLeft:'1px solid rgba(255,255,255,.25)',paddingLeft:14,fontSize:11.5}}>
+          <span style={{opacity:.65,fontSize:10}}>PERÍODO: </span>
+          <span style={{fontWeight:700}}>{cierre.corteInicio} → {cierre.corteFin}</span>
+        </div>
+        <div style={{borderLeft:'1px solid rgba(255,255,255,.25)',paddingLeft:14,fontSize:11.5}}>
+          <span style={{opacity:.65,fontSize:10}}>DESCARGA: </span>
+          <span style={{fontWeight:700}}>{cierre.descarga[0]} – {cierre.descarga[cierre.descarga.length-1]}</span>
+        </div>
+        <div style={{borderLeft:'1px solid rgba(255,255,255,.25)',paddingLeft:14,fontSize:11.5}}>
+          <span style={{opacity:.65,fontSize:10}}>CARGA / EERR: </span>
+          <span style={{fontWeight:700}}>{cierre.carga[0]} – {cierre.carga[cierre.carga.length-1]}</span>
+        </div>
+        {cierre.nota && (
+          <div style={{borderLeft:'1px solid rgba(255,255,255,.25)',paddingLeft:14,fontSize:11,opacity:.8,fontStyle:'italic',maxWidth:280}}>
+            ⚠️ {cierre.nota}
+          </div>
+        )}
+        <button onClick={()=>downloadExcel(cierre)}
+          style={{marginLeft:'auto',background:'rgba(255,255,255,.18)',border:'1.5px solid rgba(255,255,255,.4)',
+            color:'white',borderRadius:7,padding:'7px 14px',cursor:'pointer',fontSize:12,fontWeight:700,
+            display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap',flexShrink:0}}>
+          ⬇️ Descargar Excel
+        </button>
+      </div>
+
+      {/* GANTT */}
+      <div style={{overflowX:'auto',borderRadius:10,border:'1px solid #dad6cc',boxShadow:'0 2px 8px rgba(0,0,0,.06)'}}>
+        <table style={{borderCollapse:'collapse',fontSize:mob?10.5:12,tableLayout:'fixed',
+          minWidth: LABEL_W + RESP_W + COL_W*allDays.length + 36}}>
+          <colgroup>
+            <col style={{width:28}}/>
+            <col style={{width:LABEL_W}}/>
+            <col style={{width:RESP_W}}/>
+            {allDays.map((_,i)=><col key={i} style={{width:COL_W}}/>)}
+          </colgroup>
+          <thead>
+            {/* Fila meses */}
+            <tr>
+              <th style={{background:'#1a2f63',border:'1px solid rgba(255,255,255,.12)'}} colSpan={3}/>
+              {(()=>{
+                const groups=[];
+                allDays.forEach(d=>{
+                  const mNum = parseInt(d.split('/')[1]);
+                  const mLabel = ['','ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'][mNum];
+                  if(!groups.length||groups[groups.length-1].label!==mLabel)
+                    groups.push({label:mLabel,count:1,bg:getColBg(d)});
+                  else groups[groups.length-1].count++;
+                });
+                return groups.map((g,i)=>(
+                  <th key={i} colSpan={g.count}
+                    style={{background:g.bg,color:'white',fontFamily:'monospace',fontSize:11,
+                      fontWeight:800,letterSpacing:.06,textTransform:'uppercase',
+                      padding:'6px 4px',border:'1px solid rgba(255,255,255,.18)',textAlign:'center'}}>
+                    {g.label}
+                  </th>
+                ));
+              })()}
+            </tr>
+            {/* Fila días */}
+            <tr>
+              <th style={{background:'#1a2f63',color:'rgba(255,255,255,.55)',fontSize:9,padding:'5px 4px',border:'1px solid rgba(255,255,255,.12)',textAlign:'center',fontFamily:'monospace'}}>N°</th>
+              <th style={{background:'#1a2f63',color:'rgba(255,255,255,.8)',fontSize:10,padding:'5px 10px',border:'1px solid rgba(255,255,255,.12)',textAlign:'left',fontFamily:'monospace',letterSpacing:.03}}>ACTIVIDAD</th>
+              <th style={{background:'#1a2f63',color:'rgba(255,255,255,.7)',fontSize:9.5,padding:'5px 8px',border:'1px solid rgba(255,255,255,.12)',textAlign:'left',fontFamily:'monospace'}}>RESPONSABLE</th>
+              {allDays.map((d,i)=>{
+                const bg=getColBg(d);
+                const parts=d.split(' '); // parts[0]=dow "Jue", parts[1]="25/06"
+                return (
+                  <th key={i} style={{background:bg,color:'white',fontSize:mob?9:10.5,fontFamily:'monospace',
+                    fontWeight:700,padding:'5px 2px',border:'1px solid rgba(255,255,255,.18)',textAlign:'center',lineHeight:1.3}}>
+                    <div style={{fontSize:mob?9.5:11,fontWeight:800}}>{parts[1]}</div>
+                    <div style={{fontSize:mob?8:9,opacity:.75,fontWeight:500}}>{parts[0]}</div>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {ACTIVIDADES_CIERRE.map((act,i)=>{
+              const actDays=getActDays(act);
+              const bg=FASE_COLORS[act.fase];
+              const isPast=cierre.pasado;
+              return (
+                <tr key={act.id}
+                  style={{background:act.bold?'#f8f7ff':'white'}}
+                  onMouseEnter={e=>e.currentTarget.style.background=act.bold?'#f0eeff':'#f7f6f2'}
+                  onMouseLeave={e=>e.currentTarget.style.background=act.bold?'#f8f7ff':'white'}>
+                  <td style={{padding:'6px 4px',border:'1px solid #e8e5e0',textAlign:'center',
+                    color:'#bbb',fontSize:mob?9:10,fontFamily:'monospace'}}>{i+1}</td>
+                  <td style={{padding:'6px 10px',border:'1px solid #e8e5e0',
+                    fontWeight:act.bold?800:400,color:'#1a2f63',lineHeight:1.35,fontSize:mob?10.5:12}}>
+                    {act.titulo}
+                  </td>
+                  <td style={{padding:'6px 8px',border:'1px solid #e8e5e0',
+                    fontSize:mob?9.5:11,color:act.bold?'#333':'#666',fontWeight:act.bold?600:400,lineHeight:1.3}}>
+                    {act.responsable}
+                  </td>
+                  {allDays.map((d,di)=>{
+                    const active=actDays.includes(d);
+                    const isAM=active&&act.turno==='AM';
+                    const isPM=active&&act.turno==='PM';
+                    const isFull=active&&!act.turno;
+                    const cellBg=cierre.pasado&&active?bg+'aa':bg;
+                    return (
+                      <td key={di} style={{padding:0,border:'1px solid #e8e5e0',position:'relative',
+                        textAlign:'center',verticalAlign:'middle',minHeight:32,height:32}}>
+                        {isAM && (
+                          <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column'}}>
+                            <div style={{flex:1,background:cellBg,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                              <span style={{fontSize:7.5,fontWeight:800,color:'white',letterSpacing:.02}}>AM</span>
+                            </div>
+                            <div style={{flex:1,background:'transparent'}}/>
+                          </div>
+                        )}
+                        {isPM && (
+                          <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column'}}>
+                            <div style={{flex:1,background:'transparent'}}/>
+                            <div style={{flex:1,background:cellBg,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                              <span style={{fontSize:7.5,fontWeight:800,color:'white',letterSpacing:.02}}>PM</span>
+                            </div>
+                          </div>
+                        )}
+                        {isFull && (
+                          <div style={{position:'absolute',inset:0,background:cellBg}}/>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{marginTop:10,fontSize:11,color:'#aaa',display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:6}}>
+        <span style={{fontSize:11.5,color:'#555'}}>
+          {ACTIVIDADES_CIERRE.length} actividades · {ACTIVIDADES_CIERRE.filter(a=>a.bold).length} críticas
+        </span>
+        <span style={{fontFamily:'monospace'}}>Control de Gestión · v4</span>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// PAGE 5 — ICEO + PM
 // ─────────────────────────────────────────────
 function IceoPage() {
   const mob = useIsMobile();
@@ -1127,14 +1900,23 @@ function IceoPage() {
 // ─────────────────────────────────────────────
 // SHARED COMPONENTS
 // ─────────────────────────────────────────────
-function TaskChip({task, hasComment, draggable, onDragStart, onDragEnd, onClick}) {
+function TaskChip({task, hasComment, draggable, onDragStart, onDragEnd, onClick, onToggleStatus}) {
   const s = getTypeStyle(task.type);
+  const isListo = task.status==="listo";
   return (
-    <div draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd} onClick={onClick}
-      style={{display:"flex",alignItems:"center",gap:3,background:s.bg,color:s.fg,borderRadius:4,padding:"2.5px 5px",fontSize:9.5,fontWeight:600,lineHeight:1.3,cursor:"pointer",userSelect:"none",border:`1px solid ${s.fg==="white"?s.bg+"80":"rgba(0,0,0,.07)"}`}}
-      onMouseEnter={e=>e.currentTarget.style.opacity=".8"}
-      onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-      <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.title}</span>
+    <div draggable={draggable} onDragStart={onDragStart} onDragEnd={onDragEnd}
+      style={{display:"flex",alignItems:"center",gap:3,background:isListo?"#e4f0ea":s.bg,color:isListo?"#1d6b53":s.fg,borderRadius:4,padding:"2.5px 5px",fontSize:9.5,fontWeight:600,lineHeight:1.3,userSelect:"none",border:`1px solid ${isListo?"#a0d0b0":s.fg==="white"?s.bg+"80":"rgba(0,0,0,.07)"}`,opacity:isListo?0.75:1,transition:"all .15s"}}
+      onMouseEnter={e=>e.currentTarget.style.opacity=isListo?"0.6":".85"}
+      onMouseLeave={e=>e.currentTarget.style.opacity=isListo?"0.75":"1"}>
+      {/* Toggle status — solo para tareas no recurrentes */}
+      {task.type !== "rutina" && (
+        <button onClick={e=>{e.stopPropagation();onToggleStatus&&onToggleStatus(task.id);}}
+          title={isListo?"Marcar como pendiente":"Marcar como listo"}
+          style={{background:"none",border:"none",cursor:"pointer",padding:"0 2px 0 0",fontSize:10,lineHeight:1,color:"inherit",flexShrink:0}}>
+          {isListo?"✅":"⬜"}
+        </button>
+      )}
+      <span onClick={onClick} style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"pointer",textDecoration:isListo?"line-through":undefined}}>{task.title}</span>
       {hasComment && <span style={{fontSize:8,opacity:.7}}>💬</span>}
       <span style={{display:"flex",flexShrink:0}}>
         {task.resp.slice(0,2).map(uid=><Avatar key={uid} uid={uid} size={11}/>)}
@@ -1144,20 +1926,26 @@ function TaskChip({task, hasComment, draggable, onDragStart, onDragEnd, onClick}
   );
 }
 
-// Mobile-optimized task chip — bigger tap target, more readable
-function TaskChipMobile({task, hasComment, onClick}) {
+function TaskChipMobile({task, hasComment, onClick, onToggleStatus}) {
   const s = getTypeStyle(task.type);
+  const isListo = task.status==="listo";
   return (
-    <div onClick={onClick}
-      style={{display:"flex",alignItems:"center",gap:8,background:s.bg,color:s.fg,borderRadius:7,padding:"8px 10px",fontSize:12,fontWeight:600,lineHeight:1.35,cursor:"pointer",userSelect:"none",border:`1px solid ${s.fg==="white"?s.bg+"80":"rgba(0,0,0,.07)"}`,minHeight:38}}>
-      <span style={{flex:1,lineHeight:1.3}}>{task.title}</span>
+    <div
+      style={{display:"flex",alignItems:"center",gap:8,background:isListo?"#e4f0ea":s.bg,color:isListo?"#1d6b53":s.fg,borderRadius:7,padding:"8px 10px",fontSize:12,fontWeight:600,lineHeight:1.35,userSelect:"none",border:`1px solid ${isListo?"#a0d0b0":s.fg==="white"?s.bg+"80":"rgba(0,0,0,.07)"}`,minHeight:38,opacity:isListo?.8:1}}>
+      {task.type !== "rutina" && (
+        <button onClick={e=>{e.stopPropagation();onToggleStatus&&onToggleStatus(task.id);}}
+          style={{background:"none",border:"none",cursor:"pointer",padding:0,fontSize:16,lineHeight:1,flexShrink:0}}>
+          {isListo?"✅":"⬜"}
+        </button>
+      )}
+      <span onClick={onClick} style={{flex:1,lineHeight:1.3,cursor:"pointer",textDecoration:isListo?"line-through":undefined}}>{task.title}</span>
       <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
         {hasComment && <span style={{fontSize:11}}>💬</span>}
         <span style={{display:"flex",gap:1}}>
           {task.resp.slice(0,3).map(uid=><Avatar key={uid} uid={uid} size={18}/>)}
           {task.resp.length>3 && <span style={{fontSize:10,opacity:.7}}>+{task.resp.length-3}</span>}
         </span>
-        <span style={{fontSize:14,opacity:.4}}>›</span>
+        <span onClick={onClick} style={{fontSize:14,opacity:.4,cursor:"pointer"}}>›</span>
       </div>
     </div>
   );
@@ -1201,6 +1989,29 @@ function TaskModal({task, comments, currentUser, onClose, onSave, onDelete, onDu
         <div style={{flex:1,overflowY:"auto",padding: mob?"14px 16px":"14px 18px",WebkitOverflowScrolling:"touch"}}>
           {tab==="edit" ? (
             <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              {draft.type !== "rutina" && (
+                <Field label="Estado de la tarea">
+                  <div style={{display:"flex",gap:8}}>
+                    {["pendiente","listo"].map(s=>{
+                      const active = (draft.status||"pendiente")===s;
+                      const cfg = s==="listo"
+                        ? {bg:"#e4f0ea",color:"#1d6b53",border:"#a0d0b0",icon:"✅"}
+                        : {bg:"#f6e3e6",color:"#8a2438",border:"#d4a0a8",icon:"⏳"};
+                      return (
+                        <button key={s} onClick={()=>canEdit&&setDraft(d=>({...d,status:s}))}
+                          style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+                            padding:mob?"10px":"7px 12px",borderRadius:8,
+                            border:`2px solid ${active?cfg.border:"#e0e0e0"}`,
+                            background:active?cfg.bg:"white",color:active?cfg.color:"#aaa",
+                            fontWeight:700,fontSize:mob?13:12,cursor:canEdit?"pointer":"default",
+                            minHeight:mob?42:undefined}}>
+                          {cfg.icon} {s.charAt(0).toUpperCase()+s.slice(1)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Field>
+              )}
               <Field label="Título">
                 {canEdit ? <input value={draft.title} onChange={e=>setDraft(d=>({...d,title:e.target.value}))} style={{width:"100%",padding: mob?"10px 12px":"7px 10px",border:"1.5px solid #e0e0e0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none"}}/> : <div style={{fontSize:13,padding:"3px 0"}}>{draft.title}</div>}
               </Field>
