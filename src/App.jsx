@@ -569,15 +569,6 @@ export default function App() {
                   </span>
                 )}
               </button>
-              {showNotifs && (
-                <NotifPanel
-                  notifs={notifications}
-                  currentUser={currentUser}
-                  onClose={()=>setShowNotifs(false)}
-                  onMarkRead={async(id)=>{ await db.markRead(id); setNotifications(prev=>prev.map(n=>n.id===id?{...n,read:true}:n)); }}
-                  onMarkAll={async()=>{ await db.markAllRead(currentUser.id); setNotifications(prev=>prev.map(n=>({...n,read:true}))); }}
-                />
-              )}
             </div>
             <Avatar uid={currentUser.id} size={26}/>
             <span style={{fontSize:11.5,opacity:.85}}>{currentUser.name.split(" ")[0]}</span>
@@ -592,8 +583,19 @@ export default function App() {
       {mob && (
         <div style={{background:"#1a2f63",color:"white",height:50,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px",position:"sticky",top:0,zIndex:100,boxShadow:"0 2px 8px rgba(0,0,0,.2)"}}>
           <span style={{fontWeight:800,fontSize:13}}>Control de Gestión</span>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
             <SyncDot status={syncStatus}/>
+            {/* Campana mobile */}
+            <div style={{position:"relative"}}>
+              <button onClick={()=>setShowNotifs(s=>!s)} style={{background:"none",border:"none",color:"white",cursor:"pointer",padding:"4px 6px",display:"flex",alignItems:"center",position:"relative"}}>
+                <span style={{fontSize:20}}>🔔</span>
+                {notifications.filter(n=>!n.read).length>0 && (
+                  <span style={{position:"absolute",top:0,right:0,background:"#e34948",color:"white",borderRadius:"50%",width:17,height:17,fontSize:9,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {notifications.filter(n=>!n.read).length}
+                  </span>
+                )}
+              </button>
+            </div>
             <button onClick={()=>setMenuOpen(!menuOpen)} style={{background:"none",border:"none",color:"white",fontSize:11,padding:"4px 8px",borderRadius:5,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               <Avatar uid={currentUser.id} size={24}/>
               <span style={{fontSize:18,lineHeight:1}}>{menuOpen?"✕":"☰"}</span>
@@ -670,6 +672,16 @@ export default function App() {
       )}
       {/* Overlay para cerrar notificaciones */}
       {showNotifs && <div onClick={()=>setShowNotifs(false)} style={{position:"fixed",inset:0,zIndex:299,background:"rgba(0,0,0,.15)"}}/>}
+      {/* Panel de notificaciones — funciona en desktop y mobile */}
+      {showNotifs && (
+        <NotifPanel
+          notifs={notifications}
+          currentUser={currentUser}
+          onClose={()=>setShowNotifs(false)}
+          onMarkRead={async(id)=>{ await db.markRead(id); setNotifications(prev=>prev.map(n=>n.id===id?{...n,read:true}:n)); }}
+          onMarkAll={async()=>{ await db.markAllRead(currentUser.id); setNotifications(prev=>prev.map(n=>({...n,read:true}))); }}
+        />
+      )}
       {/* Widget de notas flotante */}
       {currentUser && <NotasWidget currentUser={currentUser}/>}
       <style dangerouslySetInnerHTML={{__html:`
@@ -2358,3 +2370,4 @@ function Btn({active, onClick, children}) {
 function Field({label, children}) {
   return <div><div style={{fontSize:10,fontWeight:700,letterSpacing:.07,textTransform:"uppercase",color:"#aaa",marginBottom:6}}>{label}</div>{children}</div>;
 }
+
