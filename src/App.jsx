@@ -1987,8 +1987,19 @@ function TaskModal({task, comments, currentUser, onClose, onSave, onDelete, onDu
         style={{background:"white",borderRadius:mob?"16px 16px 0 0":"12px",width:"100%",maxWidth:mob?undefined:540,maxHeight:mob?"92vh":"88vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 -4px 30px rgba(0,0,0,.2)"}}
         onClick={e=>e.stopPropagation()}>
 
-        {/* Drag handle on mobile */}
-        {mob && <div style={{width:40,height:4,background:"#ddd",borderRadius:2,margin:"10px auto 0",flexShrink:0}}/>}
+        {/* Drag handle + botón cerrar en mobile */}
+        {mob && (
+          <div style={{display:"flex",alignItems:"center",padding:"10px 16px 6px",flexShrink:0}}>
+            <div style={{flex:1}}/>
+            <div style={{width:44,height:5,background:"#ddd",borderRadius:3,position:"absolute",left:"50%",transform:"translateX(-50%)",top:10}}/>
+            <button onClick={onClose}
+              style={{background:"#f0f0f0",border:"none",borderRadius:20,padding:"6px 18px",
+                cursor:"pointer",fontSize:13,fontWeight:700,color:"#555",
+                display:"flex",alignItems:"center",gap:5}}>
+              ✕ Cerrar
+            </button>
+          </div>
+        )}
 
         {/* Header */}
         <div style={{padding: mob?"12px 16px 10px":"14px 18px 10px",borderBottom:"1px solid #ebebeb",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
@@ -2094,8 +2105,8 @@ function TaskModal({task, comments, currentUser, onClose, onSave, onDelete, onDu
         </div>
 
         {/* Footer */}
-        {canEdit && (
-          <div style={{padding: mob?"12px 16px 20px":"10px 18px",borderTop:"1px solid #ebebeb",display:"flex",justifyContent:"space-between",gap:7,background:"#fafafa",borderRadius:`0 0 ${mob?0:12}px ${mob?0:12}px`,flexWrap:"wrap"}}>
+        {canEdit ? (
+          <div style={{padding: mob?"12px 16px 28px":"10px 18px",borderTop:"1px solid #ebebeb",display:"flex",justifyContent:"space-between",gap:7,background:"#fafafa",borderRadius:`0 0 ${mob?0:12}px ${mob?0:12}px`,flexWrap:"wrap"}}>
             <div style={{display:"flex",gap:7}}>
               <button onClick={onDuplicate} style={{background:"white",border:"1.5px solid #dad6cc",borderRadius:7,padding: mob?"8px 14px":"6px 12px",cursor:"pointer",fontSize:mob?13:12,fontWeight:600,color:"#555",minHeight:mob?42:undefined}}>📋 Duplicar</button>
               {!task.fixed && (confirmDel ?
@@ -2105,6 +2116,12 @@ function TaskModal({task, comments, currentUser, onClose, onSave, onDelete, onDu
               )}
             </div>
             <button onClick={()=>onSave(draft)} style={{background:"#1a2f63",color:"white",border:"none",borderRadius:7,padding: mob?"9px 20px":"7px 18px",cursor:"pointer",fontSize:mob?15:13,fontWeight:700,minHeight:mob?42:undefined}}>Guardar</button>
+          </div>
+        ) : mob && (
+          <div style={{padding:"12px 16px 28px",borderTop:"1px solid #ebebeb",background:"#fafafa"}}>
+            <button onClick={onClose} style={{width:"100%",background:"#1a2f63",color:"white",border:"none",borderRadius:10,padding:"13px",cursor:"pointer",fontSize:15,fontWeight:700}}>
+              ✕ Cerrar
+            </button>
           </div>
         )}
       </div>
