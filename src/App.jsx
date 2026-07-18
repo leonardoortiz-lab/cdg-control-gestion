@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from "react";
 
 // ─────────────────────────────────────────────
@@ -668,6 +669,10 @@ export default function App() {
           <button onClick={()=>setLastError(null)} style={{marginTop:8,background:"rgba(255,255,255,.2)",border:"none",color:"white",borderRadius:5,padding:"3px 10px",cursor:"pointer",fontSize:11}}>Cerrar</button>
         </div>
       )}
+      {/* Overlay para cerrar notificaciones */}
+      {showNotifs && <div onClick={()=>setShowNotifs(false)} style={{position:"fixed",inset:0,zIndex:299,background:"rgba(0,0,0,.15)"}}/>}
+      {/* Widget de notas flotante */}
+      {currentUser && <NotasWidget currentUser={currentUser}/>}
       <style dangerouslySetInnerHTML={{__html:`
         *{box-sizing:border-box;margin:0;padding:0;}
         ::-webkit-scrollbar{width:4px;height:4px;}
@@ -2169,41 +2174,141 @@ function NotifPanel({notifs, onClose, onMarkRead, onMarkAll}) {
     if(hrs<24) return `${hrs}h`;
     return `${Math.floor(hrs/24)}d`;
   };
-  const creatorName = (uid) => {
-    const u = USERS.find(u=>u.id===uid);
-    return u ? u.name.split(" ")[0] : uid;
-  };
+  const creatorName = (uid) => { const u=USERS.find(u=>u.id===uid); return u?u.name.split(" ")[0]:uid; };
+  const typeColor = (type) => type==="nueva_tarea"?"#1a2f63":"#5b3f8c";
+  const typeBg    = (type) => type==="nueva_tarea"?"#dfe7f7":"#ece5f5";
   return (
-    <div style={{position:"absolute",top:46,right:-10,width:320,background:"white",borderRadius:10,boxShadow:"0 8px 32px rgba(0,0,0,.18)",zIndex:200,overflow:"hidden",border:"1px solid #e0ddd8"}}>
-      <div style={{background:"#1a2f63",color:"white",padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{fontWeight:700,fontSize:13}}>Notificaciones {unread>0&&<span style={{background:"#e34948",borderRadius:10,padding:"1px 7px",fontSize:10,marginLeft:4}}>{unread}</span>}</span>
+    <div style={{position:"fixed",top:0,right:0,bottom:0,width:360,background:"white",
+      boxShadow:"-4px 0 32px rgba(0,0,0,.2)",zIndex:300,display:"flex",flexDirection:"column",
+      borderLeft:"1px solid #e0ddd8"}}>
+      <div style={{background:"#1a2f63",color:"white",padding:"16px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        <div>
+          <div style={{fontWeight:800,fontSize:15}}>🔔 Notificaciones</div>
+          {unread>0&&<div style={{fontSize:11,opacity:.7,marginTop:2}}>{unread} sin leer</div>}
+        </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          {unread>0&&<button onClick={onMarkAll} style={{background:"rgba(255,255,255,.15)",border:"none",color:"white",fontSize:10,padding:"2px 8px",borderRadius:5,cursor:"pointer"}}>Marcar todas leídas</button>}
-          <button onClick={onClose} style={{background:"none",border:"none",color:"white",cursor:"pointer",fontSize:16,lineHeight:1}}>×</button>
+          {unread>0&&<button onClick={onMarkAll} style={{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.3)",color:"white",fontSize:11,padding:"5px 10px",borderRadius:6,cursor:"pointer",fontWeight:600}}>✓ Todas leídas</button>}
+          <button onClick={onClose} style={{background:"rgba(255,255,255,.1)",border:"none",color:"white",cursor:"pointer",fontSize:20,width:32,height:32,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
         </div>
       </div>
-      <div style={{maxHeight:360,overflowY:"auto"}}>
-        {notifs.length===0 && (
-          <div style={{padding:"24px 16px",textAlign:"center",color:"#aaa",fontSize:13}}>Sin notificaciones</div>
+      {unread>0&&(
+        <div style={{background:"#e34948",color:"white",padding:"8px 18px",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          <span style={{fontSize:16}}>🔴</span>
+          Tienes {unread} notificación{unread>1?"es":""} pendiente{unread>1?"s":""}
+        </div>
+      )}
+      <div style={{flex:1,overflowY:"auto"}}>
+        {notifs.length===0&&(
+          <div style={{padding:"48px 24px",textAlign:"center"}}>
+            <div style={{fontSize:40,marginBottom:12}}>🔕</div>
+            <div style={{color:"#aaa",fontSize:14,fontWeight:600}}>Sin notificaciones</div>
+            <div style={{color:"#ccc",fontSize:12,marginTop:4}}>Todo está al día</div>
+          </div>
         )}
-        {notifs.map(n=>(
+        {notifs.map((n,i)=>(
           <div key={n.id} onClick={()=>!n.read&&onMarkRead(n.id)}
-            style={{padding:"10px 14px",borderBottom:"1px solid #f0ede8",background:n.read?"white":"#f0f4ff",cursor:n.read?"default":"pointer",display:"flex",gap:10,alignItems:"flex-start"}}>
-            <span style={{fontSize:18,flexShrink:0,marginTop:1}}>{typeIcon(n.type)}</span>
+            style={{padding:"14px 18px",borderBottom:"1px solid #f0ede8",
+              background:n.read?"white":"#f8f9ff",cursor:n.read?"default":"pointer",
+              display:"flex",gap:12,alignItems:"flex-start",
+              borderLeft:`4px solid ${n.read?"transparent":typeColor(n.type)}`}}>
+            <div style={{width:38,height:38,borderRadius:10,background:typeBg(n.type),
+              display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>
+              {typeIcon(n.type)}
+            </div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:12.5,color:"#272a33",lineHeight:1.4}}>{n.message}</div>
-              <div style={{fontSize:11,color:"#aaa",marginTop:3,display:"flex",justifyContent:"space-between"}}>
-                <span>De: {creatorName(n.created_by)}</span>
-                <span>{timeAgo(n.created_at)}</span>
+              <div style={{fontSize:12.5,color:"#272a33",lineHeight:1.45,fontWeight:n.read?400:600}}>{n.message}</div>
+              <div style={{fontSize:11,color:"#aaa",marginTop:5,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{display:"flex",alignItems:"center",gap:4}}><Avatar uid={n.created_by} size={13}/>{creatorName(n.created_by)}</span>
+                <span style={{fontFamily:"monospace"}}>{timeAgo(n.created_at)}</span>
               </div>
             </div>
-            {!n.read && <span style={{width:8,height:8,borderRadius:"50%",background:"#1a2f63",flexShrink:0,marginTop:5}}/>}
+            {!n.read&&<span style={{width:10,height:10,borderRadius:"50%",background:"#e34948",flexShrink:0,marginTop:4,boxShadow:"0 0 0 3px #fde8e8"}}/>}
           </div>
         ))}
+      </div>
+      <div style={{padding:"10px 18px",borderTop:"1px solid #ebebeb",background:"#fafaf8",flexShrink:0,fontSize:11,color:"#bbb",textAlign:"center"}}>
+        Las notificaciones se actualizan cada 20 segundos
       </div>
     </div>
   );
 }
+
+function NotasWidget({currentUser}) {
+  const mob = useIsMobile();
+  const [open, setOpen]       = useState(false);
+  const [content, setContent] = useState('');
+  const [saved, setSaved]     = useState(true);
+  const [loading, setLoading] = useState(false);
+  const saveTimer             = useRef(null);
+  const u = getUserById(currentUser?.id);
+
+  useEffect(()=>{
+    if(!currentUser) return;
+    setLoading(true);
+    sbFetch(`/notas?id=eq.${currentUser.id}`)
+      .then(rows=>{ if(rows.length>0) setContent(rows[0].content||''); })
+      .catch(e=>console.error(e))
+      .finally(()=>setLoading(false));
+  },[currentUser?.id]);
+
+  function handleChange(val) {
+    setContent(val); setSaved(false);
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(()=>save(val), 1500);
+  }
+
+  async function save(val) {
+    if(!currentUser) return;
+    try {
+      await sbFetch('/notas?on_conflict=id', {method:'POST',
+        body:JSON.stringify({id:currentUser.id, user_id:currentUser.id, content:val, updated_at:new Date().toISOString()}),
+        headers:{...SB_H,'Prefer':'resolution=merge-duplicates,return=representation'}});
+      setSaved(true);
+    } catch(e){console.error(e);}
+  }
+
+  return (
+    <>
+      <button onClick={()=>setOpen(o=>!o)} title="Mis notas"
+        style={{position:"fixed",bottom:mob?80:24,right:24,width:52,height:52,borderRadius:"50%",
+          background:open?"#1a2f63":"white",color:open?"white":"#1a2f63",
+          border:"2px solid #1a2f63",boxShadow:"0 4px 16px rgba(0,0,0,.18)",
+          cursor:"pointer",fontSize:22,display:"flex",alignItems:"center",justifyContent:"center",
+          zIndex:150,transition:"all .2s"}}>
+        📝
+      </button>
+      {open&&(
+        <div style={{position:"fixed",bottom:mob?140:86,right:24,width:320,
+          background:"white",borderRadius:14,boxShadow:"0 8px 40px rgba(0,0,0,.2)",
+          zIndex:150,overflow:"hidden",border:"1px solid #e0ddd8",display:"flex",flexDirection:"column"}}>
+          <div style={{background:"#1a2f63",color:"white",padding:"11px 14px",display:"flex",alignItems:"center",gap:8}}>
+            <Avatar uid={currentUser.id} size={22}/>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:13}}>Mis notas</div>
+              <div style={{fontSize:9.5,opacity:.65}}>{u?.name}</div>
+            </div>
+            <div style={{fontSize:10,opacity:.65}}>{saved?"✓ guardado":"guardando..."}</div>
+          </div>
+          <textarea value={loading?"Cargando...":content} onChange={e=>handleChange(e.target.value)}
+            disabled={loading}
+            placeholder={"Escribe aquí tus notas, pendientes o recordatorios...\n\nEjemplo:\n• Revisar cierre\n• Llamar a Eduardo\n• Agendar reunión lunes"}
+            style={{width:"100%",height:260,padding:"12px 14px",border:"none",outline:"none",
+              resize:"none",fontSize:13,fontFamily:"'Segoe UI',sans-serif",lineHeight:1.6,
+              color:"#272a33",background:"#fafaf8"}}/>
+          <div style={{padding:"8px 14px",borderTop:"1px solid #f0ede8",background:"white",
+            display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:10.5,color:"#bbb"}}>{content.length} caracteres</span>
+            <button onClick={()=>handleChange('')}
+              style={{background:"none",border:"none",color:"#ccc",fontSize:11,cursor:"pointer",padding:"2px 6px",borderRadius:4}}>
+              Limpiar
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 
 function LoginScreen({users, onLogin}) {
   const mob = useIsMobile();
