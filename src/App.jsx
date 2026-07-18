@@ -1454,7 +1454,7 @@ function CierreMesPage({currentUser}) {
 
   // ── Descarga Excel ──
   function downloadExcel(c) {
-    import('https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs').then(XLSX => {
+    const doExport = (XLSX) => {
       const allDays = [...c.descarga, ...c.carga];
       const getActDaysLocal = (num) => {
         const d=c.descarga, g=c.carga;
@@ -1550,14 +1550,21 @@ function CierreMesPage({currentUser}) {
 
       range.e.c = 3+allDays.length;
       ws['!ref'] = XLSX.utils.encode_range(range);
-
-      // Anchos de columna
       ws['!cols']=[{wch:5},{wch:9},{wch:52},{wch:24},...allDays.map(()=>({wch:8}))];
       ws['!rows']=[{hpt:14},{hpt:18},{hpt:28},...ACTIVIDADES_CIERRE.map(()=>({hpt:28}))];
-
       XLSX.utils.book_append_sheet(wb, ws, c.mes.substring(0,15));
       XLSX.writeFile(wb, `Cierre_${c.mes.replace(' ','_')}.xlsx`);
-    });
+    };
+
+    // Cargar SheetJS via script tag si no está disponible
+    if(window.XLSX) {
+      doExport(window.XLSX);
+    } else {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+      script.onload = () => doExport(window.XLSX);
+      document.head.appendChild(script);
+    }
   }
 
   return (
@@ -2247,4 +2254,3 @@ function Btn({active, onClick, children}) {
 function Field({label, children}) {
   return <div><div style={{fontSize:10,fontWeight:700,letterSpacing:.07,textTransform:"uppercase",color:"#aaa",marginBottom:6}}>{label}</div>{children}</div>;
 }
-
