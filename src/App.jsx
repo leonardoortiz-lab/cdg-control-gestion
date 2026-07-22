@@ -33,6 +33,10 @@ const db = {
     body: JSON.stringify({id:p.id, label:p.label, status:p.status, resp:p.resp, created_by:p.created_by||null}),
     headers:{...SB_H,"Prefer":"resolution=merge-duplicates,return=representation"}}),
   deletePendiente: (id)=> sbFetch(`/pendientes?id=eq.${id}`, {method:"DELETE"}),
+  // ── Tarjetas ──
+  getTarjetas: ()=> sbFetch("/tarjetas?order=created_at.desc&limit=200"),
+  addTarjeta:  (t)=> sbFetch("/tarjetas", {method:"POST", body:JSON.stringify(t)}),
+  deleteTarjeta:(id)=> sbFetch(`/tarjetas?id=eq.${id}`, {method:"DELETE"}),
 };
 
 // ─────────────────────────────────────────────
@@ -542,7 +546,8 @@ export default function App() {
     {n:2, icon:"🗺️", label:"Roadmap"},
     {n:3, icon:"⚠️", label:"Pendientes"},
     {n:4, icon:"🔒", label:"Cierre Mes"},
-    {n:5, icon:"📋", label:"ICEO + PM"},
+    {n:5, icon:"🟨", label:"Tarjetas"},
+    {n:6, icon:"📋", label:"ICEO + PM"},
   ];
 
   return (
@@ -633,7 +638,8 @@ export default function App() {
       {page===2 && <RoadmapPage/>}
       {page===3 && <PendientesPage currentUser={currentUser} pendientes={pendientes} setPendientes={setPendientes}/>}
       {page===4 && <CierreMesPage currentUser={currentUser}/>}
-      {page===5 && <IceoPage/>}
+      {page===5 && <TarjetasPage currentUser={currentUser}/>}
+      {page===6 && <IceoPage/>}
 
       {/* ── MOBILE BOTTOM NAV ── */}
       {mob && (
@@ -727,6 +733,24 @@ function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth
   const isCurrentMonth = selectedMonth === todayMonth;
   const bdays = BIRTHDAYS.filter(b=>b.month===selectedMonth);
   const [showFilters, setShowFilters] = useState(false);
+  const [vistaMovil, setVistaMovil]   = useState("semana");
+  const [weekIdx, setWeekIdx]         = useState(0);
+
+  // Inicializar weekIdx en la semana actual al cambiar de mes
+  useEffect(()=>{
+    const allWork = getWorkDays(selectedMonth);
+    const weeks = [];
+    let week = [];
+    allWork.forEach(d=>{
+      const dow = getDOW(selectedMonth,d);
+      if(dow===0 && week.length>0){ weeks.push(week); week=[]; }
+      week.push(d);
+    });
+    if(week.length>0) weeks.push(week);
+    const refDay = isCurrentMonth ? todayDay : allWork[0];
+    const idx = Math.max(0, weeks.findIndex(w=>w.includes(refDay)));
+    setWeekIdx(idx);
+  },[selectedMonth]);
 
   const pad = mob ? "10px 12px 60px" : "14px 18px 40px";
 
@@ -799,6 +823,17 @@ function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth
       ) : (
         <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center",marginBottom:10,background:"white",borderRadius:8,padding:"8px 14px",border:"1px solid #dad6cc"}}>
           <span style={{fontSize:10,fontWeight:700,letterSpacing:.1,textTransform:"uppercase",color:"#999",marginRight:4}}>Filtrar:</span>
+          {/* Mis tareas — acceso rápido */}
+          <button onClick={()=>setFilterResp(filterResp===currentUser.id?null:currentUser.id)}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"4px 11px",borderRadius:20,
+              border:`2px solid ${filterResp===currentUser.id?"#1a2f63":"#dad6cc"}`,
+              background:filterResp===currentUser.id?"#1a2f63":"white",
+              color:filterResp===currentUser.id?"white":"#555",
+              cursor:"pointer",fontSize:11.5,fontWeight:700,transition:"all .12s"}}>
+            <Avatar uid={currentUser.id} size={13}/>
+            Mis tareas
+          </button>
+          <div style={{width:1,height:18,background:"#dad6cc",margin:"0 3px"}}/>
           {[{id:"repetitiva",label:"🔁 Recurrentes"},{id:"hito",label:"🔴 Hitos"}].map(f=>(
             <Btn key={f.id} active={filterType===f.id} onClick={()=>setFilterType(filterType===f.id?null:f.id)}>{f.label}</Btn>
           ))}
@@ -816,78 +851,276 @@ function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth
         </div>
       )}
 
-      {/* Month title */}
-      <div style={{fontFamily:"monospace",fontWeight:800,fontSize:mob?17:20,color:"#1a2f63",textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>{m?.label} 2026</div>
+      {/* Month title + resumen equipo */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8,marginBottom:8}}>
+        <div style={{fontFamily:"monospace",fontWeight:800,fontSize:mob?17:20,color:"#1a2f63",textTransform:"uppercase",letterSpacing:.5}}>{m?.label} 2026</div>
+        {/* Contador por persona */}
+        {!mob && (
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <span style={{fontSize:10,color:"#aaa",fontWeight:600,marginRight:2}}>Tareas pendientes:</span>
+            {USERS.map(u=>{
+              const pending = tasks.filter(t=>t.month===selectedMonth && t.resp.includes(u.id) && t.type!=="rutina" && t.status!=="listo").length;
+              if(pending===0) return null;
+              return (
+                <button key={u.id} onClick={()=>setFilterResp(filterResp===u.id?null:u.id)}
+                  title={`${u.name}: ${pending} tarea${pending>1?"s":""} pendiente${pending>1?"s":""}`}
+                  style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:20,
+                    border:`2px solid ${filterResp===u.id?u.color:"#e0ddd8"}`,
+                    background:filterResp===u.id?u.color+"18":"white",
+                    cursor:"pointer",transition:"all .12s"}}>
+                  <Avatar uid={u.id} size={16}/>
+                  <span style={{fontFamily:"monospace",fontWeight:800,fontSize:12,color:u.color}}>{pending}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {dupTarget && mob && <div style={{fontSize:12,color:"#8a2438",fontWeight:700,animation:"pulse 1s infinite",marginBottom:8,padding:"8px 12px",background:"#f6e3e6",borderRadius:7}}>📋 Toca el día destino para duplicar</div>}
 
-      {/* ── MOBILE: lista de días por semana ── */}
+      {/* ── MOBILE: lista de días ── */}
       {mob ? (
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          {/* Bloque pasados mobile */}
-          {isCurrentMonth && workDays.some(d=>d<todayDay) && (
-            <PastDaysBlock
-              days={workDays.filter(d=>d<todayDay)}
-              month={selectedMonth}
-              monthTasks={monthTasks}
-              comments={comments}
-              currentUser={currentUser}
-              setActiveTask={setActiveTask}
-              dupTarget={dupTarget}
-              handleDupClick={handleDupClick}
-            />
-          )}
-          {workDays.filter(d=> isCurrentMonth ? d>=todayDay : true).map(d=>{
-            const dow   = getDOW(selectedMonth,d);
-            const fer   = isFeriado(selectedMonth,d);
-            const isToday = isCurrentMonth && d === todayDay;
-            const isPast  = false; // pasados están en PastDaysBlock
-            const dTasks  = monthTasks(selectedMonth,d);
-            const isDupMode = !!dupTarget;
-            if(dTasks.length===0 && !isToday && !fer) return null;
+        <div>
+          {/* Toggle vista semanal / mensual */}
+          <div style={{display:"flex",gap:0,marginBottom:10,background:"#f0ede8",borderRadius:10,padding:3}}>
+            {[{id:"semana",label:"📅 Esta semana"},{id:"mes",label:"🗓 Todo el mes"}].map(v=>(
+              <button key={v.id} onClick={()=>setVistaMovil(v.id)}
+                style={{flex:1,padding:"8px 0",borderRadius:8,border:"none",
+                  background:vistaMovil===v.id?"white":"transparent",
+                  color:vistaMovil===v.id?"#1a2f63":"#888",
+                  fontWeight:700,fontSize:12.5,cursor:"pointer",
+                  boxShadow:vistaMovil===v.id?"0 1px 4px rgba(0,0,0,.12)":"none",
+                  transition:"all .15s"}}>
+                {v.label}
+              </button>
+            ))}
+          </div>
 
+          {/* ── VISTA SEMANAL ── */}
+          {vistaMovil==="semana" && (()=>{
+            // Calcular semana actual (lun-vie) dentro del mes seleccionado
+            const allWork = getWorkDays(selectedMonth);
+            // Encontrar la semana que contiene hoy (o primera semana si no es mes actual)
+            const refDay = isCurrentMonth ? todayDay : allWork[0];
+            // Agrupar en semanas
+            const weeks = [];
+            let week = [];
+            allWork.forEach(d=>{
+              const dow = getDOW(selectedMonth,d);
+              if(dow===0 && week.length>0){ weeks.push(week); week=[]; }
+              week.push(d);
+            });
+            if(week.length>0) weeks.push(week);
+
+            // Semana activa = la que contiene refDay
+            const activeWeekIdx = Math.max(0, weeks.findIndex(w=>w.includes(refDay)));
+            const currentWeek = weeks[weekIdx] || weeks[0] || [];
             const DOWLABELS = ["Lun","Mar","Mié","Jue","Vie"];
+
             return (
-              <div key={d}
-                style={{
-                  background: isPast?"#edecea": fer?"#f0ede6":dow===1?"#dfe7f7":"white",
-                  border:`1.5px solid ${isToday?"#1a2f63":isPast?"#d0cdc8":"#e0ddd8"}`,
-                  borderLeft:`4px solid ${dow===0?(isPast?"#b0aea8":"#1d6b53"):dow===1?(isPast?"#b0b8cc":"#1a2f63"):"#e0ddd8"}`,
-                  borderRadius:8, padding:"10px 12px",
-                  opacity: isPast?0.65:1,
-                  cursor:isDupMode?"crosshair":"default",
-                }}
-                onClick={()=>{ if(isDupMode) handleDupClick(d); }}
-              >
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:dTasks.length>0?7:0}}>
-                  <span style={{fontFamily:"monospace",fontWeight:800,fontSize:15,color:isToday?"#1a2f63":isPast?"#999":"#272a33",minWidth:22}}>{d}</span>
-                  <span style={{fontSize:11,color:isPast?"#bbb":"#999",fontWeight:600}}>{DOWLABELS[dow]}</span>
-                  {isToday && <span style={{fontSize:9,background:"#1a2f63",color:"white",borderRadius:8,padding:"1px 6px",fontWeight:700}}>HOY</span>}
-                  {isPast  && <span style={{fontSize:9,background:"#ddd",color:"#888",borderRadius:8,padding:"1px 6px",fontWeight:600}}>pasado</span>}
-                  {fer && <span style={{fontSize:10,color:"#888",fontStyle:"italic"}}>{fer.label}</span>}
-                  {!fer && !isPast && currentUser.role!=="viewer" && (
-                    <button onClick={e=>{e.stopPropagation();addTask(d);}}
-                      style={{marginLeft:"auto",background:"none",border:"1px dashed #bbb",borderRadius:5,width:26,height:26,cursor:"pointer",fontSize:16,color:"#bbb",display:"flex",alignItems:"center",justifyContent:"center",padding:0,flexShrink:0}}>+</button>
-                  )}
+              <div>
+                {/* Navegación de semanas */}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                  <button onClick={()=>setWeekIdx(i=>Math.max(0,i-1))} disabled={weekIdx===0}
+                    style={{background:"none",border:"1.5px solid #e0ddd8",borderRadius:8,padding:"6px 12px",
+                      cursor:weekIdx===0?"not-allowed":"pointer",color:weekIdx===0?"#ccc":"#1a2f63",fontWeight:700,fontSize:16}}>
+                    ‹
+                  </button>
+                  <div style={{textAlign:"center"}}>
+                    <div style={{fontWeight:800,fontSize:13,color:"#1a2f63"}}>
+                      Semana {weekIdx+1} de {weeks.length}
+                    </div>
+                    <div style={{fontSize:11,color:"#aaa"}}>
+                      {currentWeek[0] && `${currentWeek[0]} – ${currentWeek[currentWeek.length-1]} ${MONTHS.find(m=>m.num===selectedMonth)?.label}`}
+                    </div>
+                  </div>
+                  <button onClick={()=>setWeekIdx(i=>Math.min(weeks.length-1,i+1))} disabled={weekIdx===weeks.length-1}
+                    style={{background:"none",border:"1.5px solid #e0ddd8",borderRadius:8,padding:"6px 12px",
+                      cursor:weekIdx===weeks.length-1?"not-allowed":"pointer",color:weekIdx===weeks.length-1?"#ccc":"#1a2f63",fontWeight:700,fontSize:16}}>
+                    ›
+                  </button>
                 </div>
-                <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                  {dTasks.map(task=>(
-                    <TaskChipMobile key={task.id} task={task} hasComment={!!(comments[task.id]?.length)}
-                      onClick={e=>{e.stopPropagation();if(!dupTarget)setActiveTask(task);}}
-                      onToggleStatus={toggleTaskStatus}
-                    />
-                  ))}
+
+                {/* Días de la semana */}
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {currentWeek.map(d=>{
+                    const dow     = getDOW(selectedMonth,d);
+                    const fer     = isFeriado(selectedMonth,d);
+                    const isToday = isCurrentMonth && d===todayDay;
+                    const isPast  = isCurrentMonth ? d<todayDay : selectedMonth<todayMonth;
+                    const dTasks  = monthTasks(selectedMonth,d);
+                    const isDupMode = !!dupTarget;
+                    return (
+                      <div key={d}
+                        style={{
+                          background: isToday?"#f0f4ff": fer?"#f0ede6": isPast?"#f5f3ee":"white",
+                          border:`2px solid ${isToday?"#1a2f63":isPast?"#e0ddd8":"#e8e5e0"}`,
+                          borderLeft:`5px solid ${dow===0?"#1d6b53":dow===1?"#1a2f63":isToday?"#1a2f63":"#e8e5e0"}`,
+                          borderRadius:10, padding:"12px 14px",
+                          opacity: isPast?0.7:1,
+                          cursor:isDupMode?"crosshair":"default",
+                        }}
+                        onClick={()=>{ if(isDupMode) handleDupClick(d); }}>
+                        {/* Header del día */}
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:dTasks.length>0?10:0}}>
+                          <div style={{display:"flex",alignItems:"baseline",gap:6}}>
+                            <span style={{fontFamily:"monospace",fontWeight:800,fontSize:22,
+                              color:isToday?"#1a2f63":isPast?"#aaa":"#272a33",lineHeight:1}}>
+                              {d}
+                            </span>
+                            <span style={{fontSize:13,color:isToday?"#1a2f63":isPast?"#bbb":"#888",fontWeight:600}}>
+                              {DOWLABELS[dow]}
+                            </span>
+                          </div>
+                          {isToday && <span style={{fontSize:10,background:"#1a2f63",color:"white",borderRadius:8,padding:"2px 8px",fontWeight:700}}>HOY</span>}
+                          {isPast  && <span style={{fontSize:10,background:"#e8e5e0",color:"#999",borderRadius:8,padding:"2px 8px",fontWeight:600}}>pasado</span>}
+                          {fer && <span style={{fontSize:11,color:"#b9711b",fontWeight:600,marginLeft:4}}>🎌 {fer.label}</span>}
+                          {!fer && !isPast && currentUser.role!=="viewer" && (
+                            <button onClick={e=>{e.stopPropagation();addTask(d);}}
+                              style={{marginLeft:"auto",background:"#1a2f63",border:"none",borderRadius:8,
+                                width:32,height:32,cursor:"pointer",fontSize:20,color:"white",
+                                display:"flex",alignItems:"center",justifyContent:"center",padding:0,flexShrink:0}}>
+                              +
+                            </button>
+                          )}
+                        </div>
+                        {/* Tareas del día */}
+                        {dTasks.length>0 ? (
+                          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+                            {dTasks.map(task=>(
+                              <TaskChipMobile key={task.id} task={task}
+                                hasComment={!!(comments[task.id]?.length)}
+                                onClick={e=>{e.stopPropagation();if(!dupTarget)setActiveTask(task);}}
+                                onToggleStatus={toggleTaskStatus}/>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{fontSize:12,color:"#ccc",fontStyle:"italic",marginTop:4}}>Sin tareas</div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
-          })}
+          })()}
+
+          {/* ── VISTA MENSUAL MOBILE ── */}
+          {vistaMovil==="mes" && (
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              {/* Bloque pasados */}
+              {isCurrentMonth && workDays.some(d=>d<todayDay) && (
+                <PastDaysBlock
+                  days={workDays.filter(d=>d<todayDay)}
+                  month={selectedMonth} monthTasks={monthTasks}
+                  comments={comments} currentUser={currentUser}
+                  setActiveTask={setActiveTask} dupTarget={dupTarget}
+                  handleDupClick={handleDupClick}/>
+              )}
+              {/* Separadores de semana */}
+              {(()=>{
+                const DOWLABELS = ["Lun","Mar","Mié","Jue","Vie"];
+                const days = workDays.filter(d=> isCurrentMonth ? d>=todayDay : true);
+                const result = [];
+                let lastDow = -1;
+                days.forEach(d=>{
+                  const dow = getDOW(selectedMonth,d);
+                  // Separador de semana
+                  if(dow <= lastDow) {
+                    result.push(<div key={`sep-${d}`} style={{height:4,background:"#f0ede8",borderRadius:4,margin:"4px 0"}}/>);
+                  }
+                  lastDow = dow;
+                  const fer     = isFeriado(selectedMonth,d);
+                  const isToday = isCurrentMonth && d===todayDay;
+                  const dTasks  = monthTasks(selectedMonth,d);
+                  const isDupMode = !!dupTarget;
+                  if(dTasks.length===0 && !isToday && !fer) return;
+                  result.push(
+                    <div key={d}
+                      style={{
+                        background: fer?"#f0ede6":dow===1?"#f0f4ff":"white",
+                        border:`1.5px solid ${isToday?"#1a2f63":"#e8e5e0"}`,
+                        borderLeft:`4px solid ${dow===0?"#1d6b53":dow===1?"#1a2f63":isToday?"#1a2f63":"#e8e5e0"}`,
+                        borderRadius:8, padding:"9px 12px",
+                        cursor:isDupMode?"crosshair":"default",
+                        boxShadow:isToday?"0 0 0 2px #1a2f6330":undefined,
+                      }}
+                      onClick={()=>{ if(isDupMode) handleDupClick(d); }}>
+                      <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:dTasks.length>0?6:0}}>
+                        <span style={{fontFamily:"monospace",fontWeight:800,fontSize:14,
+                          color:isToday?"#1a2f63":"#272a33",minWidth:20}}>{d}</span>
+                        <span style={{fontSize:11,color:"#aaa",fontWeight:600}}>{DOWLABELS[dow]}</span>
+                        {isToday && <span style={{fontSize:9,background:"#1a2f63",color:"white",borderRadius:8,padding:"1px 6px",fontWeight:700}}>HOY</span>}
+                        {fer && <span style={{fontSize:10,color:"#888",fontStyle:"italic"}}>{fer.label}</span>}
+                        {!fer && currentUser.role!=="viewer" && (
+                          <button onClick={e=>{e.stopPropagation();addTask(d);}}
+                            style={{marginLeft:"auto",background:"none",border:"1px dashed #ccc",borderRadius:5,
+                              width:24,height:24,cursor:"pointer",fontSize:15,color:"#ccc",
+                              display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>+</button>
+                        )}
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                        {dTasks.map(task=>(
+                          <TaskChipMobile key={task.id} task={task}
+                            hasComment={!!(comments[task.id]?.length)}
+                            onClick={e=>{e.stopPropagation();if(!dupTarget)setActiveTask(task);}}
+                            onToggleStatus={toggleTaskStatus}/>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                });
+                return result;
+              })()}
+            </div>
+          )}
         </div>
       ) : (
         /* ── DESKTOP: grid 5 columnas ── */
         <>
           <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6,marginBottom:6}}>
-            {WDAYS.map((w,i)=><div key={w} style={{textAlign:"center",fontFamily:"monospace",fontSize:10.5,fontWeight:700,letterSpacing:.1,color:i===0?"#1d6b53":i===1?"#1a2f63":"#5b5f6b",textTransform:"uppercase"}}>{w}</div>)}
+            {WDAYS.map((w,i)=>{
+              const isToday = isCurrentMonth && getDOW(selectedMonth, todayDay)===i;
+              return (
+                <div key={w} style={{textAlign:"center",fontFamily:"monospace",fontSize:10.5,fontWeight:700,
+                  letterSpacing:.1,textTransform:"uppercase",
+                  color:isToday?"#1a2f63":i===0?"#1d6b53":i===1?"#1a2f63":"#5b5f6b",
+                  borderBottom:`2.5px solid ${isToday?"#1a2f63":"transparent"}`,
+                  paddingBottom:2}}>
+                  {w}
+                </div>
+              );
+            })}
           </div>
+
+          {/* ── Banner cierre activo ── */}
+          {(()=>{
+            const allCierres = [...(typeof CIERRES_PASADOS!=="undefined"?CIERRES_PASADOS:[]),...CIERRES];
+            if(selectedMonth!==todayMonth) return null;
+            const cierreActivo = allCierres.find(c=>
+              [...c.descarga,...c.carga].some(d=>{
+                const parts=d.split(' ')[1]?.split('/');
+                return parts && parseInt(parts[0])===todayDay && parseInt(parts[1])===todayMonth;
+              })
+            );
+            if(!cierreActivo) return null;
+            const enDescarga = cierreActivo.descarga.some(d=>{const p=d.split(' ')[1]?.split('/');return p&&parseInt(p[0])===todayDay&&parseInt(p[1])===todayMonth;});
+            const fase = enDescarga
+              ? {label:"🔵 Hoy: Fase de Descarga y Proyección",bg:"#1a2f63",desc:`Cierre ${cierreActivo.mes} · Corte: ${cierreActivo.corteFin}`}
+              : {label:"🟢 Hoy: Fase de Carga y Reversa",bg:"#1d6b53",desc:`Cierre ${cierreActivo.mes}`};
+            return (
+              <div style={{background:fase.bg,color:"white",borderRadius:8,padding:"9px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <span style={{fontWeight:800,fontSize:13}}>{fase.label}</span>
+                <span style={{opacity:.75,fontSize:11}}>{fase.desc}</span>
+                <button onClick={()=>setPage(4)}
+                  style={{marginLeft:"auto",background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.35)",
+                    color:"white",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11,fontWeight:700,flexShrink:0}}>
+                  Ver calendario de cierre →
+                </button>
+              </div>
+            );
+          })()}
 
           {/* ── Bloque días pasados colapsado ── */}
           {isCurrentMonth && workDays.some(d=>d<todayDay) && (
@@ -1794,7 +2027,413 @@ function CierreMesPage({currentUser}) {
 }
 
 // ─────────────────────────────────────────────
-// PAGE 5 — ICEO + PM
+// PAGE 5 — TARJETAS (juego del equipo)
+// ─────────────────────────────────────────────
+
+// Helpers de fecha/semana
+function getISOWeek(date) {
+  const d = new Date(date);
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + 4 - (d.getDay()||7));
+  const yearStart = new Date(d.getFullYear(),0,1);
+  return `${d.getFullYear()}-W${Math.ceil((((d-yearStart)/86400000)+1)/7).toString().padStart(2,'0')}`;
+}
+function getSemanaLabel(isoWeek) {
+  const [year, wk] = isoWeek.split('-W');
+  const d = new Date(year);
+  d.setDate(d.getDate() + (parseInt(wk)-1)*7 + 1 - d.getDay());
+  return `Semana del ${d.getDate()}/${d.getMonth()+1}`;
+}
+function getViernes(isoWeek) {
+  const [year, wk] = isoWeek.split('-W');
+  const d = new Date(year);
+  d.setDate(d.getDate() + (parseInt(wk)-1)*7 + 5 - d.getDay());
+  return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`;
+}
+
+function TarjetasPage({currentUser}) {
+  const mob = useIsMobile();
+  const [tarjetas, setTarjetas]   = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [showForm, setShowForm]   = useState(false);
+  const [formTarget, setFormTarget] = useState(null);
+  const [formTipo, setFormTipo]   = useState("amarilla");
+  const [formMotivo, setFormMotivo] = useState("");
+  const [saving, setSaving]       = useState(false);
+  const [confirmDel, setConfirmDel] = useState(null);
+  const [tab, setTab]             = useState("semana"); // semana | ranking | historial
+
+  const NOW   = new Date();
+  const today = NOW.toISOString().split('T')[0];
+  const currentWeek = getISOWeek(NOW);
+
+  useEffect(()=>{
+    db.getTarjetas().then(t=>{ setTarjetas(t); setLoading(false); }).catch(()=>setLoading(false));
+  },[]);
+
+  // ── Lógica de tarjetas ──
+  // Calcular tarjetas efectivas por usuario por semana
+  // 2 amarillas mismo día = roja; 3 tarjetas misma semana = roja
+  function getResumenSemana(uid, semana) {
+    const ts = tarjetas.filter(t=>t.target_uid===uid && t.semana===semana);
+    const amarillas = ts.filter(t=>t.tipo==="amarilla");
+    const rojas     = ts.filter(t=>t.tipo==="roja");
+
+    // Verificar 2 amarillas mismo día → roja
+    const porDia = {};
+    amarillas.forEach(t=>{ porDia[t.fecha]=(porDia[t.fecha]||0)+1; });
+    const rojaPorDia = Object.values(porDia).some(n=>n>=2);
+
+    // Total tarjetas semana (amarillas + rojas directas)
+    const totalSemana = ts.length;
+    const tieneRoja = rojas.length>0 || rojaPorDia || totalSemana>=3;
+
+    return { amarillas:amarillas.length, rojas:rojas.length, tieneRoja, rojaPorDia, total:totalSemana, tarjetas:ts };
+  }
+
+  function getAcumulado(uid) {
+    const ts = tarjetas.filter(t=>t.target_uid===uid);
+    const amarillas = ts.filter(t=>t.tipo==="amarilla").length;
+    const rojas = ts.filter(t=>t.tipo==="roja").length;
+    // Contar rojas efectivas por semana
+    const semanas = [...new Set(ts.map(t=>t.semana))];
+    let rojasEfectivas = rojas;
+    semanas.forEach(sem=>{
+      const r = getResumenSemana(uid, sem);
+      if(r.tieneRoja && r.rojas===0) rojasEfectivas++;
+    });
+    return { amarillas, rojas, rojasEfectivas, total: ts.length };
+  }
+
+  async function asignarTarjeta() {
+    if(!formTarget||!formMotivo.trim()) return;
+    setSaving(true);
+    const t = {
+      id: `t_${Date.now()}`,
+      target_uid: formTarget,
+      assigned_by: currentUser.id,
+      tipo: formTipo,
+      motivo: formMotivo.trim(),
+      fecha: today,
+      semana: currentWeek,
+    };
+    try {
+      await db.addTarjeta(t);
+      setTarjetas(prev=>[t,...prev]);
+      setShowForm(false); setFormTarget(null); setFormTipo("amarilla"); setFormMotivo("");
+    } catch(e){ console.error(e); }
+    setSaving(false);
+  }
+
+  async function eliminar(id) {
+    try { await db.deleteTarjeta(id); setTarjetas(prev=>prev.filter(t=>t.id!==id)); }
+    catch(e){ console.error(e); }
+    setConfirmDel(null);
+  }
+
+  if(loading) return <div style={{padding:40,textAlign:"center",color:"#aaa"}}>Cargando tarjetas...</div>;
+
+  const semanaActual = tarjetas.filter(t=>t.semana===currentWeek);
+
+  // Ranking acumulado
+  const ranking = USERS.map(u=>({ u, ...getAcumulado(u.id) }))
+    .sort((a,b)=>b.rojasEfectivas-a.rojasEfectivas||b.amarillas-a.amarillas);
+
+  return (
+    <div style={{padding:mob?"10px 10px 80px":"20px 28px 60px",maxWidth:900,margin:"0 auto"}}>
+
+      {/* Header */}
+      <div style={{marginBottom:16}}>
+        <div style={{fontFamily:"monospace",fontSize:10,fontWeight:700,letterSpacing:.14,textTransform:"uppercase",color:"#5b5f6b",marginBottom:4}}>Control de Gestión · Juego del equipo</div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}>
+          <div style={{fontWeight:800,fontSize:mob?20:26,color:"#1a2f63"}}>
+            🟨 Tarjetas <span style={{color:"#8a2438"}}>del equipo</span>
+          </div>
+          <button onClick={()=>setShowForm(true)}
+            style={{background:"#f0c020",border:"none",borderRadius:10,padding:"9px 18px",
+              cursor:"pointer",fontSize:13,fontWeight:800,color:"#333",
+              display:"flex",alignItems:"center",gap:7,boxShadow:"0 2px 8px rgba(240,192,32,.4)"}}>
+            🟨 Asignar tarjeta
+          </button>
+        </div>
+        <div style={{fontSize:12,color:"#888",marginTop:4}}>
+          2 amarillas mismo día = 🟥 roja · 3 tarjetas en la semana = 🟥 roja · Penitencia: desayuno el viernes
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{display:"flex",gap:0,marginBottom:16,background:"#f0ede8",borderRadius:10,padding:3}}>
+        {[{id:"semana",label:"Esta semana"},{id:"ranking",label:"🏆 Ranking"},{id:"historial",label:"📋 Historial"}].map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)}
+            style={{flex:1,padding:"8px 0",borderRadius:8,border:"none",
+              background:tab===t.id?"white":"transparent",
+              color:tab===t.id?"#1a2f63":"#888",
+              fontWeight:700,fontSize:mob?11.5:13,cursor:"pointer",
+              boxShadow:tab===t.id?"0 1px 4px rgba(0,0,0,.1)":"none",
+              transition:"all .15s"}}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── TAB: SEMANA ACTUAL ── */}
+      {tab==="semana" && (
+        <div>
+          <div style={{fontWeight:700,fontSize:13,color:"#1a2f63",marginBottom:12}}>
+            {getSemanaLabel(currentWeek)} · {semanaActual.length} tarjeta{semanaActual.length!==1?"s":""}
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(3,1fr)",gap:10,marginBottom:20}}>
+            {USERS.map(u=>{
+              const res = getResumenSemana(u.id, currentWeek);
+              const viernes = getViernes(currentWeek);
+              return (
+                <div key={u.id} style={{
+                  background:"white",borderRadius:12,border:`2px solid ${res.tieneRoja?"#e34948":res.amarillas>0?"#f0c020":"#e8e5e0"}`,
+                  padding:"14px 14px",position:"relative",
+                  boxShadow:res.tieneRoja?"0 0 0 3px #e3494830":res.amarillas>0?"0 0 0 3px #f0c02030":"none"
+                }}>
+                  {/* Badge roja */}
+                  {res.tieneRoja && (
+                    <div style={{position:"absolute",top:-10,right:10,background:"#e34948",color:"white",
+                      borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:800,
+                      boxShadow:"0 2px 8px rgba(227,73,72,.4)"}}>
+                      🟥 ROJA
+                    </div>
+                  )}
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                    <Avatar uid={u.id} size={32}/>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:mob?12:13,color:"#1a2f63"}}>{u.name.split(" ")[0]}</div>
+                      <div style={{fontSize:10,color:"#aaa"}}>{u.name.split(" ").slice(1).join(" ")}</div>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:8,marginBottom:res.tieneRoja?8:0}}>
+                    <div style={{flex:1,background:"#fffbe6",borderRadius:8,padding:"6px",textAlign:"center"}}>
+                      <div style={{fontSize:22,lineHeight:1}}>🟨</div>
+                      <div style={{fontFamily:"monospace",fontWeight:800,fontSize:18,color:"#b8860b"}}>{res.amarillas}</div>
+                      <div style={{fontSize:9.5,color:"#aaa",marginTop:1}}>amarillas</div>
+                    </div>
+                    <div style={{flex:1,background:"#fff0f0",borderRadius:8,padding:"6px",textAlign:"center"}}>
+                      <div style={{fontSize:22,lineHeight:1}}>🟥</div>
+                      <div style={{fontFamily:"monospace",fontWeight:800,fontSize:18,color:"#e34948"}}>{res.rojas}</div>
+                      <div style={{fontSize:9.5,color:"#aaa",marginTop:1}}>rojas</div>
+                    </div>
+                  </div>
+                  {res.tieneRoja && (
+                    <div style={{background:"#fff3f3",border:"1px solid #f0c0c0",borderRadius:8,padding:"7px 10px",fontSize:11,color:"#e34948",fontWeight:600,textAlign:"center"}}>
+                      🥐 Desayuno el viernes {viernes}
+                    </div>
+                  )}
+                  {res.tarjetas.length>0 && (
+                    <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:4}}>
+                      {res.tarjetas.slice(0,3).map(t=>(
+                        <div key={t.id} style={{fontSize:10.5,color:"#666",background:"#fafaf8",borderRadius:6,padding:"4px 8px",display:"flex",alignItems:"center",gap:4}}>
+                          <span>{t.tipo==="amarilla"?"🟨":"🟥"}</span>
+                          <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.motivo}</span>
+                        </div>
+                      ))}
+                      {res.tarjetas.length>3 && <div style={{fontSize:10,color:"#aaa",textAlign:"center"}}>+{res.tarjetas.length-3} más</div>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: RANKING ── */}
+      {tab==="ranking" && (
+        <div>
+          <div style={{fontWeight:700,fontSize:13,color:"#1a2f63",marginBottom:14}}>🏆 Ranking acumulado del período</div>
+          <div style={{background:"white",borderRadius:12,border:"1px solid #e8e5e0",overflow:"hidden"}}>
+            {/* Header */}
+            <div style={{display:"grid",gridTemplateColumns:"40px 1fr 80px 80px 100px",background:"#1a2f63",color:"white",padding:"10px 16px",fontSize:11,fontWeight:700,gap:8}}>
+              <div style={{textAlign:"center"}}>#</div>
+              <div>JUGADOR</div>
+              <div style={{textAlign:"center"}}>🟨</div>
+              <div style={{textAlign:"center"}}>🟥</div>
+              <div style={{textAlign:"center"}}>🥐 DESAYUNOS</div>
+            </div>
+            {ranking.map((r,i)=>{
+              const medals = ["🥇","🥈","🥉"];
+              const bgRank = i===0?"#fffbe6":i===1?"#f8f8f8":i===2?"#fff8f0":"white";
+              return (
+                <div key={r.u.id} style={{display:"grid",gridTemplateColumns:"40px 1fr 80px 80px 100px",
+                  padding:"12px 16px",gap:8,alignItems:"center",
+                  borderBottom:"1px solid #f0ede8",background:bgRank}}>
+                  <div style={{textAlign:"center",fontSize:i<3?20:14,fontWeight:700,color:"#aaa"}}>
+                    {i<3?medals[i]:i+1}
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <Avatar uid={r.u.id} size={28}/>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:13,color:"#1a2f63"}}>{r.u.name.split(" ")[0]}</div>
+                      <div style={{fontSize:10,color:"#aaa"}}>{r.u.name.split(" ").slice(1).join(" ")}</div>
+                    </div>
+                  </div>
+                  <div style={{textAlign:"center",fontFamily:"monospace",fontWeight:800,fontSize:18,color:r.amarillas>0?"#b8860b":"#ccc"}}>{r.amarillas}</div>
+                  <div style={{textAlign:"center",fontFamily:"monospace",fontWeight:800,fontSize:18,color:r.rojasEfectivas>0?"#e34948":"#ccc"}}>{r.rojasEfectivas}</div>
+                  <div style={{textAlign:"center",fontFamily:"monospace",fontWeight:800,fontSize:16,color:r.rojasEfectivas>0?"#b9711b":"#ccc"}}>
+                    {r.rojasEfectivas>0?`${r.rojasEfectivas} 🥐`:"—"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{marginTop:10,fontSize:11,color:"#aaa",textAlign:"center"}}>
+            Ranking basado en rojas efectivas (incluye 2 amarillas/día y 3 tarjetas/semana)
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: HISTORIAL ── */}
+      {tab==="historial" && (
+        <div>
+          <div style={{fontWeight:700,fontSize:13,color:"#1a2f63",marginBottom:12}}>
+            Historial completo · {tarjetas.length} tarjeta{tarjetas.length!==1?"s":""}
+          </div>
+          {tarjetas.length===0 && (
+            <div style={{padding:"40px",textAlign:"center",color:"#aaa",fontSize:14}}>
+              <div style={{fontSize:40,marginBottom:10}}>🏆</div>
+              Sin tarjetas aún — el equipo se está portando bien
+            </div>
+          )}
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {tarjetas.map(t=>{
+              const target   = getUserById(t.target_uid);
+              const assigner = getUserById(t.assigned_by);
+              const isRoja   = t.tipo==="roja";
+              const canDel   = currentUser.role==="admin" || currentUser.id===t.assigned_by;
+              return (
+                <div key={t.id} style={{
+                  background:"white",borderRadius:10,
+                  border:`1.5px solid ${isRoja?"#e3494840":"#f0c02040"}`,
+                  borderLeft:`5px solid ${isRoja?"#e34948":"#f0c020"}`,
+                  padding:"12px 14px",display:"flex",gap:12,alignItems:"flex-start"
+                }}>
+                  <div style={{fontSize:28,flexShrink:0,marginTop:2}}>{isRoja?"🟥":"🟨"}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:4}}>
+                      <Avatar uid={t.target_uid} size={20}/>
+                      <span style={{fontWeight:800,fontSize:13,color:target?.color}}>{target?.name}</span>
+                      <span style={{fontSize:11,color:"#aaa"}}>·</span>
+                      <span style={{fontFamily:"monospace",fontSize:10.5,color:"#888"}}>{t.fecha}</span>
+                      <span style={{fontSize:10,background:isRoja?"#fff0f0":"#fffbe6",
+                        color:isRoja?"#e34948":"#b8860b",borderRadius:10,padding:"1px 7px",fontWeight:700,border:`1px solid ${isRoja?"#f0c0c0":"#f0d060"}`}}>
+                        {isRoja?"🟥 Roja":"🟨 Amarilla"}
+                      </span>
+                    </div>
+                    <div style={{fontSize:13,color:"#333",fontStyle:"italic",marginBottom:6,lineHeight:1.4}}>
+                      "{t.motivo}"
+                    </div>
+                    <div style={{fontSize:10.5,color:"#aaa",display:"flex",alignItems:"center",gap:4}}>
+                      <span>Asignada por</span>
+                      <Avatar uid={t.assigned_by} size={13}/>
+                      <span style={{fontWeight:600,color:assigner?.color}}>{assigner?.name.split(" ")[0]}</span>
+                      <span>· {getSemanaLabel(t.semana)}</span>
+                    </div>
+                  </div>
+                  {canDel && (
+                    confirmDel===t.id ? (
+                      <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
+                        <button onClick={()=>eliminar(t.id)} style={{background:"#e34948",color:"white",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11,fontWeight:700}}>Sí</button>
+                        <button onClick={()=>setConfirmDel(null)} style={{background:"#eee",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11}}>No</button>
+                      </div>
+                    ) : (
+                      <button onClick={()=>setConfirmDel(t.id)} style={{background:"none",border:"1px solid #e0ddd8",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:11,color:"#ccc",flexShrink:0}}>✕</button>
+                    )
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL ASIGNAR TARJETA ── */}
+      {showForm && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:200,
+          display:"flex",alignItems:mob?"flex-end":"center",justifyContent:"center",padding:mob?0:20}}
+          onClick={()=>setShowForm(false)}>
+          <div style={{background:"white",borderRadius:mob?"16px 16px 0 0":"14px",
+            width:"100%",maxWidth:480,padding:"20px",boxShadow:"0 8px 40px rgba(0,0,0,.25)"}}
+            onClick={e=>e.stopPropagation()}>
+
+            {mob && <div style={{width:44,height:5,background:"#ddd",borderRadius:3,margin:"-10px auto 14px"}}/>}
+
+            <div style={{fontWeight:800,fontSize:18,color:"#1a2f63",marginBottom:4}}>Asignar tarjeta</div>
+            <div style={{fontSize:12,color:"#888",marginBottom:18}}>Registra la conducta o comentario para el historial</div>
+
+            {/* Tipo */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:8}}>Tipo de tarjeta</div>
+              <div style={{display:"flex",gap:10}}>
+                {[{id:"amarilla",icon:"🟨",label:"Amarilla",bg:"#fffbe6",border:"#f0c020",color:"#b8860b"},
+                  {id:"roja",icon:"🟥",label:"Roja directa",bg:"#fff0f0",border:"#e34948",color:"#e34948"}].map(tp=>(
+                  <button key={tp.id} onClick={()=>setFormTipo(tp.id)}
+                    style={{flex:1,padding:"12px 8px",borderRadius:10,
+                      border:`2.5px solid ${formTipo===tp.id?tp.border:"#e0ddd8"}`,
+                      background:formTipo===tp.id?tp.bg:"white",cursor:"pointer",
+                      textAlign:"center",transition:"all .15s"}}>
+                    <div style={{fontSize:28}}>{tp.icon}</div>
+                    <div style={{fontWeight:700,fontSize:13,color:formTipo===tp.id?tp.color:"#888",marginTop:4}}>{tp.label}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Jugador */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:8}}>¿Quién se la lleva?</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                {USERS.filter(u=>u.id!==currentUser.id).map(u=>(
+                  <button key={u.id} onClick={()=>setFormTarget(u.id)}
+                    style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:20,
+                      border:`2px solid ${formTarget===u.id?u.color:"#e0ddd8"}`,
+                      background:formTarget===u.id?u.color+"18":"white",
+                      cursor:"pointer",fontSize:12.5,fontWeight:600,
+                      color:formTarget===u.id?u.color:"#555"}}>
+                    <Avatar uid={u.id} size={18}/>{u.name.split(" ")[0]}
+                    {formTarget===u.id&&" ✓"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Motivo */}
+            <div style={{marginBottom:18}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>¿Qué hizo o dijo? (para el registro)</div>
+              <textarea value={formMotivo} onChange={e=>setFormMotivo(e.target.value)}
+                placeholder='Ej: "Llegó 15 minutos tarde a la reunión de cierre sin avisar"'
+                rows={3} style={{width:"100%",padding:"10px 12px",border:"1.5px solid #e0ddd8",
+                  borderRadius:8,fontSize:14,fontFamily:"inherit",resize:"none",outline:"none",lineHeight:1.5}}/>
+            </div>
+
+            {/* Botones */}
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>{setShowForm(false);setFormTarget(null);setFormMotivo("");setFormTipo("amarilla");}}
+                style={{flex:1,background:"#f5f3ee",border:"none",borderRadius:9,padding:"11px",cursor:"pointer",fontSize:13,fontWeight:600,color:"#666"}}>
+                Cancelar
+              </button>
+              <button onClick={asignarTarjeta}
+                disabled={!formTarget||!formMotivo.trim()||saving}
+                style={{flex:2,background:!formTarget||!formMotivo.trim()?"#ccc":formTipo==="roja"?"#e34948":"#f0c020",
+                  border:"none",borderRadius:9,padding:"11px",cursor:!formTarget||!formMotivo.trim()?"not-allowed":"pointer",
+                  fontSize:14,fontWeight:800,color:formTipo==="roja"?"white":"#333",transition:"all .15s"}}>
+                {saving?"Guardando...":formTipo==="amarilla"?"🟨 Asignar amarilla":"🟥 Asignar roja"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// PAGE 6 — ICEO + PM
 // ─────────────────────────────────────────────
 function IceoPage() {
   const mob = useIsMobile();
@@ -1829,7 +2468,7 @@ function IceoPage() {
             {sem:"1° Martes", gers:[{name:"Dirección Médica + Subdirección Médica",col:"#3b4d8c",items:["Indicadores clínicos"]},{name:"Gestión Operacional",col:C.iso,items:["Capacidad y eficiencia operativa","ISB · Proyección de actividad"]}], obj:"Desempeño clínico y operacional."},
             {sem:"2° Martes", gers:[{name:"Finanzas + Control de Gestión",col:C.leo,items:["Cierre Mes t-1","Proyección Mes T","Desviaciones"]}], obj:"Resultados financieros y desviaciones."},
             {sem:"3° Martes", gers:[{name:"Soporte Operacional",col:C.joa,items:["Abastecimiento, soporte crítico","CAPEX y Master Plan"]},{name:"Gestión de Personas",col:C.joa,items:["Dotación, ausentismo","Clima, productividad"]}], obj:"Continuidad operacional e inversiones."},
-            {sem:"4° Martes", gers:[{name:"Comercial",col:C.bas,items:["Convenios y aseguradoras","Licitaciones","Márgenes quirúrgicos"]},{name:"Marketing",col:C.dan,items:["Posicionamiento, campañas, captación"]}], obj:"Crecimiento sostenible y márgenes."},
+            {sem:"4° Martes", gers:[{name:"Comercial y Marketing",col:C.bas,items:["Convenios y aseguradoras","Licitaciones","Márgenes quirúrgicos","ROI campañas","Posicionamiento y captación"]}], obj:"Crecimiento sostenible a través de relaciones comerciales, márgenes y estrategia de marketing."},
           ].map((row,ri)=>(
             <div key={ri} style={{background:"white",borderRadius:9,border:"1px solid #dad6cc",overflow:"hidden"}}>
               <div style={{background:"#1a2f63",color:"white",padding:"8px 14px",fontWeight:800,fontSize:12}}>{row.sem}</div>
@@ -1862,7 +2501,7 @@ function IceoPage() {
                 {sem:"1° Martes",gers:[{name:"Dirección Médica + Subdirección Médica",col:"#3b4d8c"},{name:"Gestión Operacional",col:C.iso}],content:[["Indicadores clínicos"],["Capacidad y eficiencia operativa","ISB · Proyección de actividad"]],obj:"Analizar el desempeño clínico y operacional para mejorar la calidad y eficiencia."},
                 {sem:"2° Martes",gers:[{name:"Finanzas + Control de Gestión",col:C.leo}],content:[["Cierre Mes t-1","Proyección Mes T","Desviaciones"]],obj:"Revisar resultados financieros para asegurar sostenibilidad."},
                 {sem:"3° Martes",gers:[{name:"Soporte Operacional",col:C.joa},{name:"Gestión de Personas",col:C.joa}],content:[["Abastecimiento, soporte crítico","CAPEX y Master Plan"],["Dotación, ausentismo","Clima, productividad"]],obj:"Asegurar continuidad operacional y disponibilidad de recursos clave."},
-                {sem:"4° Martes",gers:[{name:"Comercial",col:C.bas},{name:"Marketing",col:C.dan}],content:[["Convenios y aseguradoras","Licitaciones","Márgenes quirúrgicos"],["Posicionamiento, campañas, captación"]],obj:"Impulsar crecimiento sostenible a través de relaciones comerciales."},
+                {sem:"4° Martes",gers:[{name:"Comercial y Marketing",col:C.bas}],content:[["Convenios y aseguradoras","Licitaciones","Márgenes quirúrgicos · Estado proyectos","ROI campañas · Posicionamiento y captación"]],obj:"Impulsar crecimiento sostenible a través de relaciones comerciales, licitaciones, optimización de márgenes y estrategia de marketing."},
               ].map((row,ri)=>row.gers.map((g,gi)=>(
                 <tr key={`${ri}-${gi}`} style={{background:gi%2===0?"white":"#fafaf8"}}>
                   {gi===0&&<td rowSpan={row.gers.length} style={{padding:"10px 12px",border:"1px solid #dad6cc",background:"#1a2f63",color:"white",fontWeight:800,fontSize:12.5,textAlign:"center",verticalAlign:"middle",whiteSpace:"nowrap"}}>{row.sem}</td>}
@@ -1893,8 +2532,21 @@ function IceoPage() {
           <tbody>
             {[
               {dim:"1 · FINANCIERA",dimBg:"#1a2f63",rows:[{sub:"Financiera",d:["Ingresos $","Actividad clínica"],s:["Ingresos semanal vs ppto","Actividad semanal vs ppto","Flujo de caja"],m:["Ingresos vs ppto","Resultado del mes","Cuentas por cobrar","Cuentas por pagar","Coverage · Prueba ácida"],t:["Resultado acumulado","ROIC / Rentabilidad","Proyección cierre año"],a:["Presupuesto anual","Forecast"],resp:"leo"}]},
-              {dim:"2 · PACIENTE Y MERCADO",dimBg:"#1d6b53",rows:[{sub:"Comercial",d:["Presupuesto cantidad y concreción","TM de prestaciones"],s:["Presupuestos semanales: cantidad y concreción"],m:["Mix pacientes / aseguradoras","Convenios y contratos","Productos nuevos","Venta por aseguradora"],t:["Pipeline comercial","Rentabilidad por segmento","Estrategia comercial"],a:["Objetivos comerciales","Rentabilidad por segmento"],resp:"bas"},{sub:"Experiencia Pacientes",d:["NPS / Satisfacción","Tiempos de espera","Cantidad reclamos"],s:["NPS/88 consolidado","Reclamos y causa raíz","Recomendación global"],m:["Tendencia NPS","Planes de mejora"],t:["Objetivos experiencia","Benchmark"],a:["Objetivos experiencia","Benchmark"],resp:"bas"}]},
-              {dim:"3 · PROCESOS Y OPERACIÓN",dimBg:"#5b3f8c",rows:[{sub:"Operacional · Eficiencia",d:["Productividad pabellón (%)","Productividad consultas","Uso insumos críticos"],s:["Productividad clínica global","Costo por paciente","Índice de suspensiones"],m:["Eficiencia por unidad","Productividad por especialidad","Variación costos operativos"],t:["Eficiencia consolidada","Proyectos de eficiencia"],a:["Objetivos eficiencia","Plan de productividad"],resp:"iso"},{sub:"Calidad",d:["IAAS","Eventos adversos","Mortalidad ajustada"],s:["Indicadores calidad clínica","Cumplimiento acreditación","Eventos centinela"],m:["Indicadores calidad","Cumplimiento acreditación","Eventos centinela"],t:["Resultados acreditación","Plan de calidad","Gestión riesgos"],a:["Objetivos calidad","Plan estratégico"],resp:"iso"},{sub:"CAPEX / Inversión",d:["Ejecución vs ppto","Avance físico diario (%)"],s:["Presupuesto vs real (%)","Avance físico obras (%)","Desviaciones principales"],m:["Ejecución acumulada vs ppto","Ejecución de contratos","Proyección término obras"],t:["ROI / Valor esperado","Revisión caso de inversión"],a:["Plan maestro 3-5 años","Ejecución inversiones"],resp:"dan"},{sub:"Marketing",d:["Leads por canal","Tráfico web / campañas"],s:["ROI campañas","Costo por leads","Tasa conversión"],m:["Performance multicanal","Branding y reputación","Posicionamiento de marca"],t:["Objetivos marketing","Plan de marketing anual"],a:["Objetivos marketing","Estrategia de marca"],resp:"dan"}]},
+              {dim:"2 · PACIENTE Y MERCADO",dimBg:"#1d6b53",rows:[
+                {sub:"Comercial y Marketing",
+                  d:["Presupuesto cantidad y concreción","TM de prestaciones","Leads por canal","Tráfico web / campañas"],
+                  s:["Presupuestos semanales: cantidad y concreción","ROI campañas","Costo por leads","Tasa conversión"],
+                  m:["Mix pacientes / aseguradoras","Convenios y contratos","Productos nuevos","Venta por aseguradora","Performance multicanal","Branding y reputación"],
+                  t:["Pipeline comercial","Rentabilidad por segmento","Estrategia comercial","Plan de marketing anual"],
+                  a:["Objetivos comerciales","Rentabilidad por segmento","Estrategia de marca"],
+                  resp:"bas"},
+                {sub:"Experiencia Pacientes",d:["NPS / Satisfacción","Tiempos de espera","Cantidad reclamos"],s:["NPS/88 consolidado","Reclamos y causa raíz","Recomendación global"],m:["Tendencia NPS","Planes de mejora"],t:["Objetivos experiencia","Benchmark"],a:["Objetivos experiencia","Benchmark"],resp:"bas"}
+              ]},
+              {dim:"3 · PROCESOS Y OPERACIÓN",dimBg:"#5b3f8c",rows:[
+                {sub:"Operacional · Eficiencia",d:["Productividad pabellón (%)","Productividad consultas","Uso insumos críticos"],s:["Productividad clínica global","Costo por paciente","Índice de suspensiones"],m:["Eficiencia por unidad","Productividad por especialidad","Variación costos operativos"],t:["Eficiencia consolidada","Proyectos de eficiencia"],a:["Objetivos eficiencia","Plan de productividad"],resp:"iso"},
+                {sub:"Calidad",d:["IAAS","Eventos adversos","Mortalidad ajustada"],s:["Indicadores calidad clínica","Cumplimiento acreditación","Eventos centinela"],m:["Indicadores calidad","Cumplimiento acreditación","Eventos centinela"],t:["Resultados acreditación","Plan de calidad","Gestión riesgos"],a:["Objetivos calidad","Plan estratégico"],resp:"iso"},
+                {sub:"CAPEX / Inversión",d:["Ejecución vs ppto","Avance físico diario (%)"],s:["Presupuesto vs real (%)","Avance físico obras (%)","Desviaciones principales"],m:["Ejecución acumulada vs ppto","Ejecución de contratos","Proyección término obras"],t:["ROI / Valor esperado","Revisión caso de inversión"],a:["Plan maestro 3-5 años","Ejecución inversiones"],resp:"dan"}
+              ]},
               {dim:"4 · PERSONAS",dimBg:"#b9711b",rows:[{sub:"Personas / Cultura",d:["Ausentismo del día (%)","Personal por turno","Incidentes laborales"],s:["Ausentismo semanal (%)","Horas extras","Rotación semanal"],m:["Ausentismo (%)","Rotación (%)","Clima laboral (índice)"],t:["Clima laboral","Planes de desarrollo","Capacitación"],a:["Objetivos personas","Plan cultura y desarrollo"],resp:"joa"},{sub:"Soporte Operacional",d:["Seguimiento de ahorros","Revisión diaria indicadores"],s:["Revisión de margen","Rotación de MEI","Consumo por servicio"],m:["Revisión de margen","Rotación de MEI","Consumo por servicio"],t:["Optimización de recursos","Plan de mejora continua"],a:["Objetivos soporte","Plan anual de eficiencia"],resp:"dan"}]},
             ].map((section,si)=>section.rows.map((row,ri)=>{
               const u=getUserById(row.resp);
