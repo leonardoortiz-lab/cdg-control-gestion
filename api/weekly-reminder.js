@@ -1,6 +1,5 @@
 // api/weekly-reminder.js
-// Corre automáticamente todos los lunes a las 8am Chile (11:00 UTC)
-// Usa Gmail via Nodemailer para enviar a todo el equipo
+// Envía resumen semanal usando Resend con BCC para todos los destinatarios
 
 const SB_URL = "https://aemsibavanjertkiznko.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlbXNpYmF2YW5qZXJ0a2l6bmtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3MTQwNDIsImV4cCI6MjA5OTI5MDA0Mn0.bVIy1Fmg3p2m73LT8F1xzFZTGkmc0EUgEfsTYP--iCk";
@@ -21,11 +20,6 @@ const USERS = {
 
 const MESES = ["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 const DIAS  = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
-
-const FERIADOS = new Set([
-  "2026-07-16","2026-08-15","2026-09-18","2026-09-19",
-  "2026-10-12","2026-10-31","2026-11-01","2026-12-08","2026-12-25"
-]);
 
 function getWeekRange(date) {
   const d = new Date(date);
@@ -53,8 +47,8 @@ const TIPO_LABEL = {
 };
 
 const TIPO_COLOR = {
-  hito:"#8a2438", cierre:"#1d6b53", precierre:"#b9711b", iceo:"#1a2f63",
-  audit:"#5b3f8c", default:"#1a2f63"
+  hito:"#8a2438", cierre:"#1d6b53", precierre:"#b9711b",
+  iceo:"#1a2f63", audit:"#5b3f8c", default:"#1a2f63"
 };
 
 function getTasksInRange(tasks, from, to) {
@@ -65,7 +59,7 @@ function getTasksInRange(tasks, from, to) {
   });
 }
 
-function buildEmail(nombre, uid, thisWeekTasks, nextWeekHitos, thisWeek, nextWeek) {
+function buildEmail(thisWeekTasks, nextWeekHitos, thisWeek, nextWeek) {
   const weekLabel = `${fmt(thisWeek.mon)} – ${fmt(thisWeek.fri)}`;
   const nextLabel = `${fmt(nextWeek.mon)} – ${fmt(nextWeek.fri)}`;
 
@@ -93,12 +87,9 @@ function buildEmail(nombre, uid, thisWeekTasks, nextWeekHitos, thisWeek, nextWee
               const tipo = t.tipo || t.type;
               const color = TIPO_COLOR[tipo] || TIPO_COLOR.default;
               const resp = getResponsables(Array.isArray(t.resp) ? t.resp : JSON.parse(t.resp||"[]"));
-              const esMia = (Array.isArray(t.resp) ? t.resp : JSON.parse(t.resp||"[]")).includes(uid);
-              return `<div style="padding:8px 12px;margin-bottom:4px;background:${esMia?"#f0f4ff":"#fafaf8"};
-                border-radius:7px;border-left:3px solid ${esMia?color:"#e0ddd8"};">
-                <div style="font-weight:${esMia?700:500};font-size:13px;color:#272a33;">
-                  ${t.title}${esMia?` <span style="font-size:10px;background:${color};color:white;border-radius:10px;padding:1px 6px;">tuya</span>`:""}
-                </div>
+              return `<div style="padding:8px 12px;margin-bottom:4px;background:#fafaf8;
+                border-radius:7px;border-left:3px solid ${color};">
+                <div style="font-weight:500;font-size:13px;color:#272a33;">${t.title}</div>
                 <div style="font-size:11px;color:#888;margin-top:2px;">${TIPO_LABEL[tipo]||"📌"} · ${resp}</div>
               </div>`;
             }).join("")}
@@ -110,13 +101,10 @@ function buildEmail(nombre, uid, thisWeekTasks, nextWeekHitos, thisWeek, nextWee
     : nextWeekHitos.sort((a,b) => a.day - b.day).map(t => {
         const date = new Date(2026, t.month-1, t.day);
         const resp = getResponsables(Array.isArray(t.resp) ? t.resp : JSON.parse(t.resp||"[]"));
-        const esMio = (Array.isArray(t.resp) ? t.resp : JSON.parse(t.resp||"[]")).includes(uid);
-        return `<div style="padding:10px 14px;margin-bottom:8px;background:${esMio?"#fff0f0":"#fafaf8"};
-          border-radius:8px;border-left:4px solid ${esMio?"#8a2438":"#e0ddd8"};">
+        return `<div style="padding:10px 14px;margin-bottom:8px;background:#fff8f8;
+          border-radius:8px;border-left:4px solid #8a2438;">
           <div style="font-size:11px;color:#8a2438;font-weight:700;margin-bottom:3px;">${fmt(date)}</div>
-          <div style="font-weight:${esMio?700:500};font-size:13px;color:#272a33;">
-            ${t.title}${esMio?` <span style="font-size:10px;background:#8a2438;color:white;border-radius:10px;padding:1px 6px;">tuyo</span>`:""}
-          </div>
+          <div style="font-weight:600;font-size:13px;color:#272a33;">${t.title}</div>
           <div style="font-size:11px;color:#888;margin-top:2px;">Responsable: ${resp}</div>
         </div>`;
       }).join("");
@@ -132,8 +120,8 @@ function buildEmail(nombre, uid, thisWeekTasks, nextWeekHitos, thisWeek, nextWee
       <div style="color:rgba(255,255,255,.7);font-size:12px;margin-top:4px;">Resumen semanal · ${weekLabel}</div>
     </div>
     <div style="background:white;padding:20px 28px;border-left:1px solid #e0ddd8;border-right:1px solid #e0ddd8;">
-      <p style="color:#272a33;font-size:14px;margin:0 0 6px;">Hola ${nombre} 👋</p>
-      <p style="color:#666;font-size:13px;margin:0;">Aquí tienes el resumen de esta semana y los hitos de la siguiente. Las actividades marcadas como <strong>tuya</strong> son las que tienes asignadas directamente.</p>
+      <p style="color:#272a33;font-size:14px;margin:0 0 6px;">Hola equipo 👋</p>
+      <p style="color:#666;font-size:13px;margin:0;">Aquí tienen el resumen de actividades de esta semana y los hitos críticos de la siguiente.</p>
     </div>
     <div style="background:white;padding:20px 28px;border-left:1px solid #e0ddd8;border-right:1px solid #e0ddd8;margin-top:2px;">
       <div style="margin-bottom:16px;">
@@ -184,40 +172,36 @@ export default async function handler(req, res) {
     const nextWeekHitos = getTasksInRange(allTasks, nextWeek.mon, nextWeek.fri)
       .filter(t => ["hito","cierre","audit","precierre","iceo"].includes(t.tipo || t.type));
 
-    // Configurar nodemailer con Gmail
-    const nodemailer = await import("nodemailer");
-    const transporter = nodemailer.default.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_PASS,
+    // Construir email único para todo el equipo
+    const html = buildEmail(thisWeekTasks, nextWeekHitos, thisWeek, nextWeek);
+
+    // Enviar UN solo email con todos en BCC via Resend
+    // En modo testing solo llega al dueño de la cuenta,
+    // pero con BCC todos reciben sin verse entre sí
+    const todos = DESTINATARIOS.map(d => d.email);
+    
+    const emailResp = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        from: "Control de Gestión <onboarding@resend.dev>",
+        to: ["leonardo.ortiz@redsalud.cl"],  // destinatario principal
+        bcc: todos.filter(e => e !== "leonardo.ortiz@redsalud.cl"), // resto en BCC
+        subject: `⛏️ Resumen semanal CdG · ${new Date().toLocaleDateString("es-CL",{day:"2-digit",month:"2-digit"})}`,
+        html,
+      }),
     });
 
-    // Enviar a cada destinatario
-    const results = [];
-    for(const dest of DESTINATARIOS) {
-      const html = buildEmail(dest.nombre, dest.uid, thisWeekTasks, nextWeekHitos, thisWeek, nextWeek);
-      try {
-        const info = await transporter.sendMail({
-          from: `"Control de Gestión ⛏️" <${process.env.GMAIL_USER}>`,
-          to: dest.email,
-          subject: `⛏️ Resumen semanal CdG · ${new Date().toLocaleDateString("es-CL",{day:"2-digit",month:"2-digit"})}`,
-          html,
-        });
-        results.push({ email: dest.email, ok: true, id: info.messageId });
-      } catch(e) {
-        results.push({ email: dest.email, ok: false, error: e.message });
-      }
-    }
+    const result = await emailResp.json();
 
     return res.status(200).json({
-      ok: true,
-      sent: results.filter(r=>r.ok).length,
-      failed: results.filter(r=>!r.ok).length,
+      ok: emailResp.ok,
       thisWeekTasks: thisWeekTasks.filter(t=>(t.tipo||t.type)!=="rutina").length,
       nextWeekHitos: nextWeekHitos.length,
-      results,
+      result,
     });
 
   } catch(err) {
