@@ -4,17 +4,26 @@ on:
   schedule:
     # Lunes 11:00 UTC = 8:00am Chile (UTC-3)
     - cron: '0 11 * * 1'
-  workflow_dispatch: # permite correrlo manualmente desde GitHub
+  workflow_dispatch: # permite correrlo manualmente
 
 jobs:
   send-reminder:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar dependencias
+        run: npm install nodemailer
+
       - name: Enviar recordatorio semanal
-        run: |
-          curl -X POST "https://cdg-control-gestion-cqoq.vercel.app/api/weekly-reminder" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json" \
-            --fail \
-            --silent \
-            --show-error
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
+          SB_KEY: ${{ secrets.SB_KEY }}
+        run: node .github/scripts/send-reminder.js
