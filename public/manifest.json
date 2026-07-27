@@ -1,0 +1,26 @@
+{
+  "short_name": "CdG",
+  "name": "Control de Gestión RedSalud",
+  "description": "Planificación y control de gestión del equipo RedSalud 2026",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1a2f63",
+  "background_color": "#1a2f63",
+  "lang": "es",
+  "categories": ["business", "productivity"]
+}
