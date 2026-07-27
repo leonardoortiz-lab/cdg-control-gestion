@@ -520,7 +520,13 @@ export default function App() {
     persistTask(updated);
   }
   async function resetData() {
-    if(!window.confirm("¿Resetear todos los datos?")) return;
+    if(currentUser.id !== "leo") return;
+    const primera = window.confirm("⚠️ ATENCIÓN\n\nEsta acción eliminará TODAS las tareas del calendario y las recargará desde cero.\n\nLos pendientes, tarjetas y notas NO se verán afectados.\n\n¿Estás seguro que deseas continuar?");
+    if(!primera) return;
+    const segunda = window.confirm("🔴 CONFIRMACIÓN FINAL\n\nSe borrarán permanentemente todas las tareas y comentarios del calendario.\n\nEscribe OK en el siguiente paso para confirmar.");
+    if(!segunda) return;
+    const confirmText = window.prompt('Escribe "RESETEAR" para confirmar:');
+    if(confirmText !== "RESETEAR") { window.alert("Operación cancelada — texto incorrecto."); return; }
     setSyncStatus("saving");
     try {
       await db.seedTasks(INITIAL_TASKS);
@@ -543,11 +549,9 @@ export default function App() {
 
   const NAV_TABS = [
     {n:1, icon:"📅", label:"Calendario"},
-    {n:2, icon:"🗺️", label:"Roadmap"},
-    {n:3, icon:"⚠️", label:"Pendientes"},
-    {n:4, icon:"🔒", label:"Cierre Mes"},
-    {n:5, icon:"🟨", label:"Tarjetas"},
-    {n:6, icon:"📋", label:"ICEO + PM"},
+    {n:2, icon:"⚠️", label:"Pendientes"},
+    {n:3, icon:"🟨", label:"Tarjetas"},
+    {n:4, icon:"🗂️", label:"Planificación"},
   ];
 
   return (
@@ -578,7 +582,7 @@ export default function App() {
             <Avatar uid={currentUser.id} size={26}/>
             <span style={{fontSize:11.5,opacity:.85}}>{currentUser.name.split(" ")[0]}</span>
             <span style={{fontSize:10,background:"rgba(255,255,255,.15)",padding:"2px 7px",borderRadius:10,color:"rgba(255,255,255,.75)"}}>{currentUser.role}</span>
-            {currentUser.role==="admin" && <button onClick={resetData} style={{background:"rgba(255,60,60,.25)",border:"none",color:"white",fontSize:10,padding:"3px 8px",borderRadius:5,cursor:"pointer"}}>Reset</button>}
+            {currentUser.id==="leo" && <button onClick={resetData} style={{background:"rgba(255,60,60,.25)",border:"none",color:"white",fontSize:10,padding:"3px 8px",borderRadius:5,cursor:"pointer"}}>Reset</button>}
             <button onClick={()=>setCurrentUser(null)} style={{background:"rgba(255,255,255,.12)",border:"none",color:"white",fontSize:11,padding:"3px 9px",borderRadius:5,cursor:"pointer"}}>Salir</button>
           </div>
         </div>
@@ -612,7 +616,7 @@ export default function App() {
               <div style={{padding:"10px 16px",borderBottom:"1px solid rgba(255,255,255,.1)",fontSize:12,color:"rgba(255,255,255,.6)"}}>
                 {currentUser.name} · <span style={{textTransform:"capitalize"}}>{currentUser.role}</span>
               </div>
-              {currentUser.role==="admin" && <button onClick={()=>{resetData();setMenuOpen(false);}} style={{width:"100%",background:"none",border:"none",color:"#ff9999",fontSize:13,padding:"12px 16px",cursor:"pointer",textAlign:"left"}}>🔄 Resetear datos</button>}
+              {currentUser.id==="leo" && <button onClick={()=>{resetData();setMenuOpen(false);}} style={{width:"100%",background:"none",border:"none",color:"#ff9999",fontSize:13,padding:"12px 16px",cursor:"pointer",textAlign:"left"}}>🔄 Resetear datos</button>}
               <button onClick={()=>{setCurrentUser(null);setMenuOpen(false);}} style={{width:"100%",background:"none",border:"none",color:"white",fontSize:13,padding:"12px 16px",cursor:"pointer",textAlign:"left"}}>← Salir</button>
             </div>
           )}
@@ -635,11 +639,9 @@ export default function App() {
           showToast={showToast} toggleTaskStatus={toggleTaskStatus}
         />
       )}
-      {page===2 && <RoadmapPage/>}
-      {page===3 && <PendientesPage currentUser={currentUser} pendientes={pendientes} setPendientes={setPendientes}/>}
-      {page===4 && <CierreMesPage currentUser={currentUser}/>}
-      {page===5 && <TarjetasPage currentUser={currentUser}/>}
-      {page===6 && <IceoPage/>}
+      {page===2 && <PendientesPage currentUser={currentUser} pendientes={pendientes} setPendientes={setPendientes} tasks={tasks} setTasks={setTasks} persistTask={persistTask} notifyAssigned={notifyAssigned} notifyNewTask={notifyNewTask} selectedMonth={selectedMonth}/>}
+      {page===3 && <TarjetasPage currentUser={currentUser}/>}
+      {page===4 && <ReferenciaCombPage currentUser={currentUser}/>}
 
       {/* ── MOBILE BOTTOM NAV ── */}
       {mob && (
@@ -1216,8 +1218,38 @@ function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth
 }
 
 // ─────────────────────────────────────────────
-// PAGE 2 — ROADMAP
+// PAGE 4 — ROADMAP · CIERRE · ICEO (combinada)
 // ─────────────────────────────────────────────
+function ReferenciaCombPage({currentUser}) {
+  const mob = useIsMobile();
+  const [subTab, setSubTab] = useState("roadmap");
+  const TABS = [
+    {id:"roadmap", icon:"🗺️", label:"Roadmap"},
+    {id:"cierre",  icon:"🔒", label:"Cierre Mes"},
+    {id:"iceo",    icon:"📋", label:"ICEO + PM"},
+  ];
+  return (
+    <div style={{minHeight:"60vh"}}>
+      {/* Sub-tabs */}
+      <div style={{background:"white",borderBottom:"1px solid #e0ddd8",padding:mob?"0 12px":"0 24px",display:"flex",gap:0,position:"sticky",top:mob?50:46,zIndex:90}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setSubTab(t.id)}
+            style={{padding:mob?"10px 14px":"10px 20px",background:"none",border:"none",
+              borderBottom:`3px solid ${subTab===t.id?"#1a2f63":"transparent"}`,
+              color:subTab===t.id?"#1a2f63":"#888",fontWeight:700,
+              fontSize:mob?12:13,cursor:"pointer",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+      {subTab==="roadmap" && <RoadmapPage/>}
+      {subTab==="cierre"  && <CierreMesPage currentUser={currentUser}/>}
+      {subTab==="iceo"    && <IceoPage/>}
+    </div>
+  );
+}
+
+
 function RoadmapPage() {
   const mob = useIsMobile();
   const [showPast, setShowPast] = useState(false);
@@ -1350,11 +1382,11 @@ const STATUS_CONFIG = {
 };
 const STATUS_OPTIONS = ["por iniciar","en ajuste","listo","no válido"];
 
-function PendientesPage({currentUser, pendientes, setPendientes}) {
+function PendientesPage({currentUser, pendientes, setPendientes, tasks, setTasks, persistTask, notifyAssigned, notifyNewTask, selectedMonth}) {
   const mob = useIsMobile();
   const [editId, setEditId]   = useState(null);
   const [showNew, setShowNew] = useState(false);
-  const [newItem, setNewItem] = useState({label:"",status:"por iniciar",resp:[]});
+  const [newItem, setNewItem] = useState({label:"",status:"por iniciar",resp:[],fecha:""});
   const [saving, setSaving]   = useState(false);
 
   async function saveEdit(id) {
@@ -1373,9 +1405,48 @@ function PendientesPage({currentUser, pendientes, setPendientes}) {
     try {
       await db.upsertPendiente(p);
       setPendientes(prev=>[...prev,p]);
+
+      // Si tiene fecha, crear tarea en el calendario
+      if(newItem.fecha) {
+        const [year, month, day] = newItem.fecha.split('-').map(Number);
+        const newTask = {
+          id: `t_pend_${Date.now()}`,
+          month, day,
+          type: "hito",
+          title: `⚠️ ${newItem.label}`,
+          resp: newItem.resp,
+          notes: `Pendiente estratégico creado desde la página de Pendientes`,
+          fixed: false,
+          status: "pendiente",
+        };
+        if(setTasks) setTasks(prev=>[...prev, newTask]);
+        if(persistTask) await persistTask(newTask);
+
+        // Notificar a admins de nueva tarea
+        if(notifyNewTask) await notifyNewTask(newTask);
+      }
+
+      // Notificar a responsables asignados
+      if(notifyAssigned && newItem.resp.length > 0) {
+        const fakeTask = {id: p.id, title: p.label, day: newItem.fecha ? parseInt(newItem.fecha.split('-')[2]) : null, resp: newItem.resp};
+        for(const uid of newItem.resp) {
+          if(uid !== currentUser?.id) {
+            await db.addNotification({
+              user_id: uid,
+              type: "asignado",
+              message: `${USERS.find(u=>u.id===currentUser?.id)?.name||"Alguien"} te asignó al pendiente: "${newItem.label}"`,
+              task_id: p.id,
+              task_title: newItem.label,
+              created_by: currentUser?.id||null,
+              read: false,
+            });
+          }
+        }
+      }
+
     } catch(e){console.error(e);}
     setSaving(false);
-    setNewItem({label:"",status:"por iniciar",resp:[]});
+    setNewItem({label:"",status:"por iniciar",resp:[],fecha:""});
     setShowNew(false);
   }
 
@@ -1428,6 +1499,11 @@ function PendientesPage({currentUser, pendientes, setPendientes}) {
                   onChange={e=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,label:e.target.value}:x))}
                   style={{width:"100%",padding:"7px 10px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none"}}/>
                 <div>
+                  <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Fecha límite (opcional)</div>
+                  <input type="date" value={p.fecha||""} onChange={e=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,fecha:e.target.value}:x))}
+                    style={{padding:"7px 10px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none",width:mob?"100%":"auto"}}/>
+                </div>
+                <div>
                   <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Estado</div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                     {STATUS_OPTIONS.map(s=>{ const c=STATUS_CONFIG[s]; return (
@@ -1466,7 +1542,11 @@ function PendientesPage({currentUser, pendientes, setPendientes}) {
                 {statusBadge(p.status)}
                 <span style={{fontSize:mob?12.5:13,fontWeight:500,flex:1,lineHeight:1.4,
                   textDecoration:p.status==="no válido"?"line-through":"none",
-                  color:p.status==="no válido"?"#aaa":"#272a33"}}>{p.label}</span>
+                  color:p.status==="no válido"?"#aaa":"#272a33"}}>{p.label}
+                  {p.fecha && <span style={{fontSize:10,color:"#1a2f63",background:"#dfe7f7",borderRadius:10,padding:"1px 7px",marginLeft:6,fontWeight:600}}>
+                    📅 {new Date(p.fecha+"T12:00:00").toLocaleDateString("es-CL",{day:"2-digit",month:"2-digit"})}
+                  </span>}
+                </span>
                 {(p.resp||[]).length>0 && (
                   <div style={{display:"flex",gap:2,flexShrink:0}}>
                     {(p.resp||[]).map(uid=><Avatar key={uid} uid={uid} size={mob?20:18}/>)}
@@ -1496,6 +1576,12 @@ function PendientesPage({currentUser, pendientes, setPendientes}) {
               style={{width:"100%",padding:mob?"10px 12px":"8px 11px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none"}}
               autoFocus/>
             <div>
+              <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Fecha límite (opcional — aparece en el calendario)</div>
+              <input type="date" value={newItem.fecha} onChange={e=>setNewItem(p=>({...p,fecha:e.target.value}))}
+                style={{padding:"8px 11px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none",width:mob?"100%":"auto"}}/>
+              {newItem.fecha && <span style={{fontSize:11,color:"#1d6b53",marginLeft:8}}>✓ Se creará un hito en el calendario</span>}
+            </div>
+            <div>
               <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Estado</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
                 {STATUS_OPTIONS.map(s=>{ const c=STATUS_CONFIG[s]; return (
@@ -1521,7 +1607,7 @@ function PendientesPage({currentUser, pendientes, setPendientes}) {
               </div>
             </div>
             <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-              <button onClick={()=>{setShowNew(false);setNewItem({label:"",status:"por iniciar",resp:[]});}}
+              <button onClick={()=>{setShowNew(false);setNewItem({label:"",status:"por iniciar",resp:[],fecha:""});}}
                 style={{background:"white",border:"1.5px solid #ccc",borderRadius:7,padding:"6px 14px",cursor:"pointer",fontSize:12}}>Cancelar</button>
               <button onClick={addNew} disabled={saving||!newItem.label.trim()}
                 style={{background:newItem.label.trim()?"#1a2f63":"#aaa",color:"white",border:"none",borderRadius:7,padding:"6px 16px",cursor:newItem.label.trim()?"pointer":"default",fontSize:12,fontWeight:700}}>
@@ -2992,27 +3078,36 @@ function NotasWidget({currentUser}) {
 
 function LoginScreen({users, onLogin}) {
   const mob = useIsMobile();
+  // Ordenar por apellido (segunda palabra del nombre)
+  const sorted = [...users].sort((a,b)=>{
+    const apellidoA = a.name.split(" ").slice(1).join(" ").toLowerCase();
+    const apellidoB = b.name.split(" ").slice(1).join(" ").toLowerCase();
+    return apellidoA.localeCompare(apellidoB, "es");
+  });
   return (
     <div style={{minHeight:"100vh",background:"#1a2f63",display:"flex",alignItems:"center",justifyContent:"center",padding:mob?16:20}}>
       <div style={{background:"white",borderRadius:14,padding:mob?24:32,maxWidth:400,width:"100%",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
         <div style={{textAlign:"center",marginBottom:mob?20:24}}>
+          <div style={{fontSize:32,marginBottom:8}}>⛏️</div>
           <div style={{fontSize:10,fontFamily:"monospace",fontWeight:700,letterSpacing:.15,textTransform:"uppercase",color:"#aaa",marginBottom:7}}>Control de Gestión · 2026</div>
           <div style={{fontSize:mob?18:20,fontWeight:800,color:"#1a2f63"}}>Planificación del equipo</div>
-          <div style={{fontSize:12.5,color:"#999",marginTop:6}}>Selecciona tu usuario para continuar</div>
+          <div style={{fontSize:12.5,color:"#999",marginTop:6}}>Selecciona tu nombre para continuar</div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {users.map(u=>(
+          {sorted.map(u=>(
             <button key={u.id} onClick={()=>onLogin(u)}
-              style={{display:"flex",alignItems:"center",gap:11,padding: mob?"13px 16px":"11px 15px",border:"2px solid #e8e8e8",borderRadius:10,background:"white",cursor:"pointer",textAlign:"left",minHeight:mob?56:undefined}}
+              style={{display:"flex",alignItems:"center",gap:11,padding:mob?"13px 16px":"11px 15px",border:"2px solid #e8e8e8",borderRadius:10,background:"white",cursor:"pointer",textAlign:"left",minHeight:mob?56:undefined}}
               onMouseEnter={e=>{e.currentTarget.style.borderColor=u.color;e.currentTarget.style.background=u.color+"0D";}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor="#e8e8e8";e.currentTarget.style.background="white";}}>
               <Avatar uid={u.id} size={mob?38:34}/>
-              <div><div style={{fontWeight:700,fontSize:mob?15:13.5,color:"#1a2f63"}}>{u.name}</div><div style={{fontSize:11,color:"#bbb",textTransform:"capitalize"}}>{u.role}</div></div>
+              <div style={{fontWeight:700,fontSize:mob?15:13.5,color:"#1a2f63"}}>{u.name}</div>
               <span style={{marginLeft:"auto",fontSize:mob?18:13,color:"#ccc"}}>›</span>
             </button>
           ))}
         </div>
-        <div style={{marginTop:16,fontSize:11,color:"#ccc",textAlign:"center",lineHeight:1.5}}>Admin: edición completa · Editor: mover y comentar<br/>Datos en tiempo real vía Supabase</div>
+        <div style={{marginTop:16,fontSize:11,color:"#ccc",textAlign:"center",lineHeight:1.5}}>
+          Datos compartidos en tiempo real · RedSalud 2026
+        </div>
       </div>
     </div>
   );
@@ -3039,4 +3134,3 @@ function Btn({active, onClick, children}) {
 function Field({label, children}) {
   return <div><div style={{fontSize:10,fontWeight:700,letterSpacing:.07,textTransform:"uppercase",color:"#aaa",marginBottom:6}}>{label}</div>{children}</div>;
 }
-
