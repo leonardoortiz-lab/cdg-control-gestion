@@ -2714,10 +2714,43 @@ function TaskChipMobile({task, hasComment, onClick, onToggleStatus}) {
 
 function TaskModal({task, comments, currentUser, onClose, onSave, onDelete, onDuplicate, onAddComment, canEdit}) {
   const mob = useIsMobile();
-  const [draft, setDraft] = useState({...task});
-  const [newComment, setNew] = useState("");
-  const [tab, setTab] = useState("edit");
+  const [draft, setDraft]           = useState({...task});
+  const [newComment, setNew]        = useState("");
+  const [tab, setTab]               = useState("edit");
   const [confirmDel, setConfirmDel] = useState(false);
+  const [showRecurr, setShowRecurr] = useState(false);
+  const [recurrType, setRecurrType] = useState("semanal");
+  const [recurrHasta, setRecurrHasta] = useState("2026-12-31");
+  const [recurrPreview, setRecurrPreview] = useState([]);
+
+  const MESES_SHORT = ["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  const DIAS_SHORT  = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
+
+  function calcRecurr(tipo, hasta) {
+    const t = tipo || recurrType;
+    const h = hasta || recurrHasta;
+    const base = new Date(2026, draft.month-1, draft.day);
+    const hastaDate = new Date(h);
+    const fechas = [];
+    if(t==="semanal") {
+      const d = new Date(base); d.setDate(d.getDate()+7);
+      while(d <= hastaDate) {
+        if(d.getDay()!==0 && d.getDay()!==6) fechas.push(new Date(d));
+        d.setDate(d.getDate()+7);
+      }
+    } else {
+      let m = draft.month+1, y = 2026;
+      while(true) {
+        if(m>12){m=1;y++;}
+        const nd = new Date(y, m-1, draft.day);
+        if(nd > hastaDate) break;
+        if(nd.getDay()!==0 && nd.getDay()!==6) fechas.push(new Date(nd));
+        m++;
+      }
+    }
+    setRecurrPreview(fechas);
+    return fechas;
+  }
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:200,display:"flex",alignItems:mob?"flex-end":"center",justifyContent:"center",padding:mob?0:20}} onClick={onClose}>
@@ -2811,6 +2844,69 @@ function TaskModal({task, comments, currentUser, onClose, onSave, onDelete, onDu
                   );})}
                 </div>
               </Field>
+              {/* ── Recurrencia ── */}
+              {canEdit && (
+                <div style={{background:showRecurr?"#f0f4ff":"#fafaf8",border:`1.5px solid ${showRecurr?"#c0d0f0":"#e8e5e0"}`,borderRadius:9,padding:"10px 13px"}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#1a2f63",display:"flex",alignItems:"center",gap:6}}>
+                      🔁 Repetir esta tarea
+                    </div>
+                    <button onClick={()=>{ setShowRecurr(s=>!s); if(!showRecurr) calcRecurr(); }}
+                      style={{background:showRecurr?"#1a2f63":"white",color:showRecurr?"white":"#1a2f63",
+                        border:"1.5px solid #1a2f63",borderRadius:20,padding:"4px 12px",cursor:"pointer",fontSize:11,fontWeight:700}}>
+                      {showRecurr?"Cancelar":"Activar"}
+                    </button>
+                  </div>
+
+                  {showRecurr && (
+                    <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:10}}>
+                      {/* Tipo */}
+                      <div>
+                        <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Frecuencia</div>
+                        <div style={{display:"flex",gap:8}}>
+                          {[{id:"semanal",label:`📅 Semanal (cada ${DIAS_SHORT[new Date(2026,draft.month-1,draft.day).getDay()]})`},
+                            {id:"mensual",label:`📆 Mensual (día ${draft.day} de cada mes)`}].map(f=>(
+                            <button key={f.id} onClick={()=>{setRecurrType(f.id);calcRecurr(f.id,recurrHasta);}}
+                              style={{flex:1,padding:"8px 6px",borderRadius:8,border:`2px solid ${recurrType===f.id?"#1a2f63":"#e0e0e0"}`,
+                                background:recurrType===f.id?"#1a2f63":"white",color:recurrType===f.id?"white":"#666",
+                                fontSize:mob?12:11,fontWeight:700,cursor:"pointer",textAlign:"center"}}>
+                              {f.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Hasta */}
+                      <div>
+                        <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Repetir hasta</div>
+                        <input type="date" value={recurrHasta}
+                          onChange={e=>{setRecurrHasta(e.target.value);calcRecurr(recurrType,e.target.value);}}
+                          min="2026-07-01" max="2026-12-31"
+                          style={{padding:"7px 10px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none"}}/>
+                      </div>
+
+                      {/* Preview */}
+                      {recurrPreview.length>0 && (
+                        <div style={{background:"white",borderRadius:7,border:"1px solid #e0ddd8",padding:"8px 10px"}}>
+                          <div style={{fontSize:11,fontWeight:700,color:"#1a2f63",marginBottom:6}}>
+                            Se crearán {recurrPreview.length} copias:
+                          </div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:4,maxHeight:80,overflowY:"auto"}}>
+                            {recurrPreview.map((d,i)=>(
+                              <span key={i} style={{fontSize:10,background:"#dfe7f7",color:"#1a2f63",borderRadius:10,padding:"2px 7px",fontFamily:"monospace",fontWeight:600}}>
+                                {DIAS_SHORT[d.getDay()]} {d.getDate()} {MESES_SHORT[d.getMonth()+1]}
+                              </span>
+                            ))}
+                          </div>
+                          {recurrPreview.length>20 && <div style={{fontSize:10,color:"#aaa",marginTop:4}}>y {recurrPreview.length-20} más...</div>}
+                        </div>
+                      )}
+                      {recurrPreview.length===0 && <div style={{fontSize:11,color:"#e34948"}}>No hay días hábiles en ese rango.</div>}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <Field label="Notas">
                 {canEdit ? <textarea value={draft.notes||""} onChange={e=>setDraft(d=>({...d,notes:e.target.value}))} rows={3} placeholder="Contexto, links, instrucciones..." style={{width:"100%",padding: mob?"10px 12px":"7px 10px",border:"1.5px solid #e0e0e0",borderRadius:7,fontSize:mob?15:12.5,fontFamily:"inherit",resize:"vertical",outline:"none"}}/> : <div style={{fontSize:12.5,color:"#555",lineHeight:1.5}}>{draft.notes||<span style={{color:"#bbb"}}>Sin notas</span>}</div>}
               </Field>
@@ -2853,7 +2949,28 @@ function TaskModal({task, comments, currentUser, onClose, onSave, onDelete, onDu
                 <button onClick={()=>setConfirmDel(true)} style={{background:"white",border:"1.5px solid #f0c0c0",borderRadius:7,padding: mob?"8px 14px":"6px 12px",cursor:"pointer",fontSize:mob?13:12,fontWeight:600,color:"#c0392b",minHeight:mob?42:undefined}}>🗑 Eliminar</button>
               )}
             </div>
-            <button onClick={()=>onSave(draft)} style={{background:"#1a2f63",color:"white",border:"none",borderRadius:7,padding: mob?"9px 20px":"7px 18px",cursor:"pointer",fontSize:mob?15:13,fontWeight:700,minHeight:mob?42:undefined}}>Guardar</button>
+            <button onClick={()=>{
+              if(showRecurr && recurrPreview.length>0) {
+                // Guardar tarea original
+                onSave(draft);
+                // Crear copias recurrentes
+                recurrPreview.forEach(d=>{
+                  const copy = {
+                    ...draft,
+                    id: `t_rec_${Date.now()}_${d.getTime()}`,
+                    day: d.getDate(),
+                    month: d.getMonth()+1,
+                    fixed: false,
+                    status: "pendiente",
+                  };
+                  onSave(copy);
+                });
+              } else {
+                onSave(draft);
+              }
+            }} style={{background:"#1a2f63",color:"white",border:"none",borderRadius:7,padding: mob?"9px 20px":"7px 18px",cursor:"pointer",fontSize:mob?15:13,fontWeight:700,minHeight:mob?42:undefined}}>
+              {showRecurr && recurrPreview.length>0 ? `Guardar + ${recurrPreview.length} copias` : "Guardar"}
+            </button>
           </div>
         ) : mob && (
           <div style={{padding:"12px 16px 28px",borderTop:"1px solid #ebebeb",background:"#fafafa"}}>
