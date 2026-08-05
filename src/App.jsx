@@ -5,21 +5,13 @@ import { useState, useEffect, useRef } from "react";
 // ─────────────────────────────────────────────
 const SB_URL = "https://aemsibavanjertkiznko.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlbXNpYmF2YW5qZXJ0a2l6bmtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3MTQwNDIsImV4cCI6MjA5OTI5MDA0Mn0.bVIy1Fmg3p2m73LT8F1xzFZTGkmc0EUgEfsTYP--iCk";
-const SB_H = { "apikey":SB_KEY, "Authorization":`Bearer ${SB_KEY}`, "Content-Type":"application/json", "Prefer":"return=representation", "X-Client-Info":"cdg-app/1.0" };
+const SB_H = { "apikey":SB_KEY, "Authorization":`Bearer ${SB_KEY}`, "Content-Type":"application/json", "Prefer":"return=representation" };
 
 async function sbFetch(path, opts={}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(()=>controller.abort(), 10000); // 10s timeout
-  try {
-    const r = await fetch(`${SB_URL}/rest/v1${path}`, { headers:SB_H, signal:controller.signal, ...opts });
-    clearTimeout(timeout);
-    const txt = await r.text();
-    if(!r.ok) throw new Error(txt);
-    return txt ? JSON.parse(txt) : [];
-  } catch(e) {
-    clearTimeout(timeout);
-    throw e;
-  }
+  const r = await fetch(`${SB_URL}/rest/v1${path}`, { headers:SB_H, ...opts });
+  const txt = await r.text();
+  if(!r.ok) throw new Error(txt);
+  return txt ? JSON.parse(txt) : [];
 }
 const db = {
   getTasks:    ()=> sbFetch("/tasks?order=day.asc"),
@@ -336,7 +328,7 @@ export default function App() {
   const [tasks, setTasks]           = useState([]);
   const [comments, setComments]     = useState({});
   const [loaded, setLoaded]         = useState(false);
-  const [selectedMonth, setSelectedMonth] = useState(7);
+  const [selectedMonth, setSelectedMonth] = useState(()=>new Date().getMonth()+1);
   const [activeTask, setActiveTask] = useState(null);
   const [filterType, setFilterType] = useState(null);
   const [filterResp, setFilterResp] = useState(null);
@@ -359,14 +351,19 @@ export default function App() {
   // ── Load ──
   async function loadFromDB(silent=false) {
     try {
-      const [rawT, rawC, rawP] = await Promise.all([db.getTasks(), db.getComments(), db.getPendientes()]);
+      // Cargar tareas primero (más importante) luego el resto
+      const rawT = await db.getTasks();
       if(rawT.length===0) {
         await db.seedTasks(INITIAL_TASKS);
         setTasks(INITIAL_TASKS);
       } else {
         setTasks(rawT.map(t=>({...t, resp:Array.isArray(t.resp)?t.resp:(JSON.parse(t.resp||"[]")), status:t.status||"pendiente"})));
       }
-      // Seed pendientes si están vacíos
+      if(!silent) setLoaded(true); // Mostrar app apenas tenemos tareas
+
+      // Cargar el resto en paralelo después
+      const [rawC, rawP] = await Promise.all([db.getComments(), db.getPendientes()]);
+
       if(rawP.length===0) {
         const initial = PENDIENTES.map((p,i)=>({...p,id:`p${i}`,resp:p.resp||[],created_by:null}));
         for(const p of initial) await db.upsertPendiente(p);
@@ -374,10 +371,11 @@ export default function App() {
       } else {
         setPendientes(rawP.map(p=>({...p,resp:Array.isArray(p.resp)?p.resp:(JSON.parse(p.resp||"[]"))})));
       }
+
       const grouped = {};
       rawC.forEach(c=>{ if(!grouped[c.task_id]) grouped[c.task_id]=[]; grouped[c.task_id].push({uid:c.user_id,text:c.text,ts:new Date(c.created_at).getTime()}); });
       setComments(grouped);
-      if(!silent) setLoaded(true);
+
     } catch(e) {
       console.error(e);
       setTasks(INITIAL_TASKS);
@@ -771,14 +769,33 @@ function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth
       <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch",paddingBottom:4,marginBottom:10}}>
         <div style={{display:"flex",gap:6,alignItems:"center",minWidth:"max-content"}}>
           <span style={{fontSize:10,fontWeight:700,letterSpacing:.1,textTransform:"uppercase",color:"#5b5f6b",marginRight:4,flexShrink:0}}>Mes:</span>
-          {MONTHS.map(mo=>(
-            <button key={mo.num} onClick={()=>setSelectedMonth(mo.num)}
-              style={{padding: mob?"6px 12px":"5px 14px", borderRadius:20, border:`2px solid ${selectedMonth===mo.num?"#1a2f63":"#dad6cc"}`,
-                background:selectedMonth===mo.num?"#1a2f63":"white", color:selectedMonth===mo.num?"white":"#5b5f6b",
-                fontWeight:700, fontSize: mob?13:12, cursor:"pointer", flexShrink:0, minHeight:mob?36:undefined}}>
-              {mo.label}
-            </button>
-          ))}
+          {MONTHS.map(mo=>{
+            const isPast    = mo.num < todayMonth;
+            const isCurrent = mo.num === todayMonth;
+            const isSelected = selectedMonth === mo.num;
+            return (
+              <button key={mo.num} onClick={()=>setSelectedMonth(mo.num)}
+                style={{
+                  padding: mob?"6px 12px":"5px 14px",
+                  borderRadius:20,
+                  border:`2px solid ${isSelected?"#1a2f63":isPast?"#c8c4bc":"#dad6cc"}`,
+                  background: isSelected?"#1a2f63": isPast?"#e8e5e0":"white",
+                  color: isSelected?"white": isPast?"#999":"#5b5f6b",
+                  fontWeight: isCurrent?800:700,
+                  fontSize: mob?13:12,
+                  cursor:"pointer",
+                  flexShrink:0,
+                  minHeight:mob?36:undefined,
+                  opacity: isPast&&!isSelected?0.7:1,
+                  position:"relative",
+                }}>
+                {mo.label}
+                {isCurrent && !isSelected && (
+                  <span style={{position:"absolute",top:-3,right:-3,width:8,height:8,borderRadius:"50%",background:"#e34948",border:"1.5px solid white"}}/>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
