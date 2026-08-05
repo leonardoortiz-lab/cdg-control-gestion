@@ -5,13 +5,21 @@ import { useState, useEffect, useRef } from "react";
 // ─────────────────────────────────────────────
 const SB_URL = "https://aemsibavanjertkiznko.supabase.co";
 const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlbXNpYmF2YW5qZXJ0a2l6bmtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3MTQwNDIsImV4cCI6MjA5OTI5MDA0Mn0.bVIy1Fmg3p2m73LT8F1xzFZTGkmc0EUgEfsTYP--iCk";
-const SB_H = { "apikey":SB_KEY, "Authorization":`Bearer ${SB_KEY}`, "Content-Type":"application/json", "Prefer":"return=representation" };
+const SB_H = { "apikey":SB_KEY, "Authorization":`Bearer ${SB_KEY}`, "Content-Type":"application/json", "Prefer":"return=representation", "X-Client-Info":"cdg-app/1.0" };
 
 async function sbFetch(path, opts={}) {
-  const r = await fetch(`${SB_URL}/rest/v1${path}`, { headers:SB_H, ...opts });
-  const txt = await r.text();
-  if(!r.ok) throw new Error(txt);
-  return txt ? JSON.parse(txt) : [];
+  const controller = new AbortController();
+  const timeout = setTimeout(()=>controller.abort(), 10000); // 10s timeout
+  try {
+    const r = await fetch(`${SB_URL}/rest/v1${path}`, { headers:SB_H, signal:controller.signal, ...opts });
+    clearTimeout(timeout);
+    const txt = await r.text();
+    if(!r.ok) throw new Error(txt);
+    return txt ? JSON.parse(txt) : [];
+  } catch(e) {
+    clearTimeout(timeout);
+    throw e;
+  }
 }
 const db = {
   getTasks:    ()=> sbFetch("/tasks?order=day.asc"),
