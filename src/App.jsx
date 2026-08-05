@@ -430,8 +430,8 @@ export default function App() {
   }
 
   useEffect(()=>{ loadFromDB(); },[]);
-  useEffect(()=>{ pollRef.current=setInterval(()=>loadFromDB(true),15000); return ()=>clearInterval(pollRef.current); },[]);
-  useEffect(()=>{ if(currentUser) { loadNotifications(currentUser.id); const t=setInterval(()=>loadNotifications(currentUser.id),20000); return ()=>clearInterval(t); } },[currentUser]);
+  useEffect(()=>{ pollRef.current=setInterval(()=>loadFromDB(true),60000); return ()=>clearInterval(pollRef.current); },[]);
+  useEffect(()=>{ if(currentUser) { loadNotifications(currentUser.id); const t=setInterval(()=>loadNotifications(currentUser.id),90000); return ()=>clearInterval(t); } },[currentUser]);
 
   // ── Persist ──
   async function persistTask(t) {
