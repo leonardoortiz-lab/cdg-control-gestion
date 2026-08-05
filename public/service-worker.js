@@ -1,20 +1,23 @@
-const CACHE_NAME = "cdg-v2";
-
-self.addEventListener("install", event => {
-  self.skipWaiting();
-});
-
-self.addEventListener("activate", event => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.map(k => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
-});
-
-self.addEventListener("fetch", event => {
-  // No interceptar NADA — dejar pasar todo al servidor
-  // Esto evita que el SW bloquee llamadas a Supabase
-  return;
-});
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#1a2f63" />
+    <meta name="description" content="Control de Gestión — RedSalud 2026" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="CdG" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231a2f63'/><text y='.9em' font-size='75' x='12'>&#9935;</text></svg>" />
+    <title>Control de Gestión 2026</title>
+    <style>
+      body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+      * { box-sizing: border-box; }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
