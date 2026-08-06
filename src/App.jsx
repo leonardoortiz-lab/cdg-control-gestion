@@ -1765,6 +1765,56 @@ function PendientesPage({currentUser, pendientes, setPendientes, tasks, setTasks
 }
 
 
+// ─────────────────────────────────────────────
+// DATOS CIERRE DE MES
+// ─────────────────────────────────────────────
+const ACTIVIDADES_CIERRE = [
+  {id:"c1",  fase:"descarga", bold:true,  titulo:"Carga de actividad y prestaciones de Pabellón en sistema al día", responsable:"Katherine Figueroa",       area:"Pabellón"},
+  {id:"c2",  fase:"descarga", bold:true,  titulo:"Provisión de pacientes acostados",                                  responsable:"Cecilia I. / Eduardo M.",   area:"Hospitalización"},
+  {id:"c3",  fase:"descarga", bold:false, titulo:"Envío Ajustes MEMO y cálculo distribución",                         responsable:"Daniela Araya",             area:"Contabilidad"},
+  {id:"c4",  fase:"descarga", bold:false, titulo:"Envío de consumo de servicios, ajustes de stocks, Farmacia VP y Eco",responsable:"Eduardo Morales",          area:"CdG"},
+  {id:"c5",  fase:"descarga", bold:false, titulo:"Envío de Liquidación de Centro Médico, Dental, Urgencias, Fertilidad, Poli.", responsable:"Macarena F. / Daniela M.", area:"Administración"},
+  {id:"c6",  fase:"descarga", bold:false, titulo:"Envío provisión costos con áreas MK, TI, Mantenciones para validación de cierre", responsable:"Joaquín P. / Daniela R.", area:"CdG"},
+  {id:"c7",  fase:"descarga", bold:true,  titulo:"Bases preliminar de Prestaciones, MEI y HM a fichas",              responsable:"Eduardo Morales",            area:"CdG"},
+  {id:"c8",  fase:"descarga", bold:true,  titulo:"Ingreso de HM x UEN",                                              responsable:"Isidora Sepúlveda",          area:"CdG"},
+  {id:"c9",  fase:"descarga", bold:false, titulo:"Cálculo y contabilización de GRD/GES/NoGes",                       responsable:"Isidora Sepúlveda",          area:"CdG"},
+  {id:"c10", fase:"descarga", bold:false, titulo:"Envío Informe Resumen CxC al cierre de Mes",                       responsable:"Francisca Montecinos",       area:"Cobranza"},
+  {id:"c11", fase:"descarga", bold:false, titulo:"Envío de estimación Turnos Méd. y distribución sueldos y gratif.", responsable:"Paula Coronado",             area:"RRHH"},
+  {id:"c12", fase:"descarga", bold:false, titulo:"Provisión Vacaciones y Finiquitos",                                 responsable:"Paula Coronado",             area:"RRHH"},
+  {id:"c13", fase:"carga",    bold:true,  titulo:"Entrega de Base Ingresos y Reval x Fichas y MEI del mes, y Comp Cont.", responsable:"Eduardo Morales",       area:"CdG",            turno:"AM"},
+  {id:"c14", fase:"carga",    bold:true,  titulo:"Centralización de remuneraciones",                                  responsable:"Paula Coronado",             area:"RRHH",           turno:"AM"},
+  {id:"c15", fase:"carga",    bold:true,  titulo:"Provisión proyección prestaciones y HM",                            responsable:"Bastián Retamal",            area:"CdG",            turno:"AM"},
+  {id:"c16", fase:"carga",    bold:false, titulo:"Cálculo final deterioro CxC",                                       responsable:"Isidora Sepúlveda",          area:"CdG"},
+  {id:"c17", fase:"carga",    bold:false, titulo:"Ingresos devengados y Contabilización Hemosan",                     responsable:"Eduardo M. / Paola V.",      area:"CdG"},
+  {id:"c18", fase:"carga",    bold:true,  titulo:"Consumo pacientes y provisión consumos",                            responsable:"Eduardo M. / Bastián R.",    area:"CdG"},
+  {id:"c19", fase:"carga",    bold:false, titulo:"Envío data indicadores RRHH",                                       responsable:"Paula Coronado",             area:"RRHH"},
+  {id:"c20", fase:"carga",    bold:false, titulo:"Envío de costos Turnos Médicos INFOGEST",                           responsable:"Paula C. / Fabiola M.",      area:"RRHH"},
+  {id:"c21", fase:"carga",    bold:false, titulo:"Cierre de Libros de compra y ventas, Determinación de IVA No Recuperable", responsable:"Contabilidad",       area:"Contabilidad"},
+  {id:"c22", fase:"carga",    bold:false, titulo:"Cierre de Bancos de todas las Sociedades",                          responsable:"Rodrigo Recabal",            area:"Tesorería"},
+  {id:"c23", fase:"carga",    bold:true,  titulo:"Entrega de Base Honorarios Médicos del mes en carpetas compartidas",responsable:"Margarita M. / Fabiola M.", area:"RRHH",           turno:"AM"},
+  {id:"c24", fase:"carga",    bold:false, titulo:"Flujo de efectivo",                                                 responsable:"Rodrigo Recabal",            area:"Tesorería",      turno:"PM"},
+  {id:"c25", fase:"eerr",     bold:false, titulo:"Cierre de Impuestos a la renta",                                    responsable:"Vania Larraín",              area:"Contabilidad",   turno:"AM"},
+  {id:"c26", fase:"eerr",     bold:false, titulo:"Cierre de VP",                                                      responsable:"Paola Valdebenito",          area:"Contabilidad",   turno:"AM"},
+  {id:"c27", fase:"eerr",     bold:true,  titulo:"Reunión Pre Cierre",                                                responsable:"RedSalud / Finanzas / Personas", area:"RedSalud",  turno:""},
+];
+
+const CIERRES = [
+  {mes:"Julio 2026",num:7,year:2026,corteInicio:"26/06/2026",corteFin:"28/07/2026",descarga:["Mié 29/07","Jue 30/07","Vie 31/07"],carga:["Lun 03/08","Mar 04/08","Mié 05/08","Jue 06/08"],pasado:false,actual:true,nota:"Fecha de corte especial: incluye desde 26/06 por ajuste del cierre anterior."},
+  {mes:"Agosto 2026",num:8,year:2026,corteInicio:"29/07/2026",corteFin:"27/08/2026",descarga:["Jue 27/08","Vie 28/08","Lun 31/08"],carga:["Mar 01/09","Mié 02/09","Jue 03/09","Vie 04/09"],pasado:false,actual:false},
+  {mes:"Septiembre 2026",num:9,year:2026,corteInicio:"28/08/2026",corteFin:"28/09/2026",descarga:["Lun 28/09","Mar 29/09","Mié 30/09"],carga:["Jue 01/10","Vie 02/10","Lun 05/10","Mar 06/10"],pasado:false,actual:false},
+  {mes:"Octubre 2026",num:10,year:2026,corteInicio:"29/09/2026",corteFin:"27/10/2026",descarga:["Mié 28/10","Jue 29/10","Vie 30/10"],carga:["Lun 02/11","Mar 03/11","Mié 04/11","Jue 05/11"],pasado:false,actual:false,nota:"31/10 es feriado (Día de las Iglesias Evangélicas), se excluye del cierre."},
+  {mes:"Noviembre 2026",num:11,year:2026,corteInicio:"28/10/2026",corteFin:"25/11/2026",descarga:["Jue 26/11","Vie 27/11","Lun 30/11"],carga:["Mar 01/12","Mié 02/12","Jue 03/12","Vie 04/12"],pasado:false,actual:false},
+];
+
+const CIERRES_PASADOS = [
+  {mes:"Enero 2026",num:1,year:2026,corteInicio:"29/12/2025",corteFin:"27/01/2026",descarga:["Mié 28/01","Jue 29/01","Vie 30/01"],carga:["Lun 02/02","Mar 03/02","Mié 04/02","Jue 05/02"],pasado:true},
+  {mes:"Febrero 2026",num:2,year:2026,corteInicio:"28/01/2026",corteFin:"24/02/2026",descarga:["Mié 25/02","Jue 26/02","Vie 27/02"],carga:["Lun 02/03","Mar 03/03","Mié 04/03","Jue 05/03"],pasado:true},
+  {mes:"Marzo 2026",num:3,year:2026,corteInicio:"25/02/2026",corteFin:"26/03/2026",descarga:["Vie 27/03","Lun 30/03","Mar 31/03"],carga:["Mié 01/04","Jue 02/04","Lun 06/04","Mar 07/04"],pasado:true,nota:"3 y 4 de abril son Semana Santa (feriados), primer hábil es mié 01/04."},
+  {mes:"Abril 2026",num:4,year:2026,corteInicio:"27/03/2026",corteFin:"27/04/2026",descarga:["Mar 28/04","Mié 29/04","Jue 30/04"],carga:["Lun 04/05","Mar 05/05","Mié 06/05","Jue 07/05"],pasado:true,nota:"1 de mayo es feriado, primer hábil del mes es lun 04/05."},
+  {mes:"Mayo 2026",num:5,year:2026,corteInicio:"28/04/2026",corteFin:"26/05/2026",descarga:["Mié 27/05","Jue 28/05","Vie 29/05"],carga:["Lun 01/06","Mar 02/06","Mié 03/06","Jue 04/06"],pasado:true},
+  {mes:"Junio 2026",num:6,year:2026,corteInicio:"27/05/2026",corteFin:"24/06/2026",descarga:["Jue 25/06","Vie 26/06","Mar 30/06"],carga:["Mié 01/07","Jue 02/07","Vie 03/07","Lun 06/07"],pasado:true,nota:"29/06 es feriado (San Pedro y San Pablo). 3° hábil salta al mar 30/06."},
+];
+
 function TarjetasPage({currentUser}) {
   const mob = useIsMobile();
   const [tarjetas, setTarjetas]   = useState([]);
