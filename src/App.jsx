@@ -3,8 +3,8 @@ import { useState, useEffect, useRef } from "react";
 // ─────────────────────────────────────────────
 // SUPABASE
 // ─────────────────────────────────────────────
-const SB_URL = "https://aemsibavanjertkiznko.supabase.co";
-const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFlbXNpYmF2YW5qZXJ0a2l6bmtvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3MTQwNDIsImV4cCI6MjA5OTI5MDA0Mn0.bVIy1Fmg3p2m73LT8F1xzFZTGkmc0EUgEfsTYP--iCk";
+const SB_URL = "https://gmtcsaoiaeknpzoyljjm.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdtdGNzYW9pYWVrbnB6b3lsamptIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0MDMzNjcsImV4cCI6MjA2OTk3OTM2N30.LmBqmvFpOfW_EZGMqJkiB_H4cIFOEZ6VZfyqJDlXW0U";
 const SB_H = { "apikey":SB_KEY, "Authorization":`Bearer ${SB_KEY}`, "Content-Type":"application/json", "Prefer":"return=representation" };
 
 async function sbFetch(path, opts={}) {
