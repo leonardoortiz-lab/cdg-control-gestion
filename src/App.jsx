@@ -1555,7 +1555,15 @@ function PendientesPage({currentUser, pendientes, setPendientes, tasks, setTasks
                   <div key={`${u}-${i}`} style={{background:bg,borderRadius:8,padding:6,minHeight:60,border:"1px solid #e8e5e0"}}>
                     {items.map(p=>(
                       <div key={p.id} style={{fontSize:10,background:"white",borderRadius:5,padding:"3px 6px",marginBottom:3,lineHeight:1.3,boxShadow:"0 1px 3px rgba(0,0,0,.07)"}}>
-                        {p.label}
+                        <div style={{fontWeight:600,color:"#272a33"}}>{p.label}</div>
+                        {(p.resp||[]).length>0 && (
+                          <div style={{display:"flex",gap:2,marginTop:2,flexWrap:"wrap"}}>
+                            {(p.resp||[]).map(uid=>{
+                              const u=USERS.find(x=>x.id===uid);
+                              return u ? <span key={uid} style={{fontSize:8.5,color:u.color,fontWeight:600}}>{u.name.split(" ")[0]}</span> : null;
+                            })}
+                          </div>
+                        )}
                       </div>
                     ))}
                     {items.length===0 && <div style={{color:"#ddd",fontSize:9,textAlign:"center",marginTop:8}}>—</div>}
@@ -1814,6 +1822,29 @@ const CIERRES_PASADOS = [
   {mes:"Mayo 2026",num:5,year:2026,corteInicio:"28/04/2026",corteFin:"26/05/2026",descarga:["Mié 27/05","Jue 28/05","Vie 29/05"],carga:["Lun 01/06","Mar 02/06","Mié 03/06","Jue 04/06"],pasado:true},
   {mes:"Junio 2026",num:6,year:2026,corteInicio:"27/05/2026",corteFin:"24/06/2026",descarga:["Jue 25/06","Vie 26/06","Mar 30/06"],carga:["Mié 01/07","Jue 02/07","Vie 03/07","Lun 06/07"],pasado:true,nota:"29/06 es feriado (San Pedro y San Pablo). 3° hábil salta al mar 30/06."},
 ];
+
+// ─────────────────────────────────────────────
+// HELPERS TARJETAS
+// ─────────────────────────────────────────────
+function getISOWeek(date) {
+  const d = new Date(date);
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() + 4 - (d.getDay()||7));
+  const yearStart = new Date(d.getFullYear(),0,1);
+  return `${d.getFullYear()}-W${Math.ceil((((d-yearStart)/86400000)+1)/7).toString().padStart(2,'0')}`;
+}
+function getSemanaLabel(isoWeek) {
+  const [year, wk] = isoWeek.split('-W');
+  const d = new Date(year);
+  d.setDate(d.getDate() + (parseInt(wk)-1)*7 + 1 - d.getDay());
+  return `Semana del ${d.getDate()}/${d.getMonth()+1}`;
+}
+function getViernes(isoWeek) {
+  const [year, wk] = isoWeek.split('-W');
+  const d = new Date(year);
+  d.setDate(d.getDate() + (parseInt(wk)-1)*7 + 5 - d.getDay());
+  return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`;
+}
 
 function TarjetasPage({currentUser}) {
   const mob = useIsMobile();
