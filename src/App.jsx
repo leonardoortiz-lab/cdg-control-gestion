@@ -30,7 +30,7 @@ const db = {
   // ── Pendientes ──
   getPendientes: ()=> sbFetch("/pendientes?order=created_at.asc"),
   upsertPendiente: (p)=> sbFetch("/pendientes?on_conflict=id", {method:"POST",
-    body: JSON.stringify({id:p.id, label:p.label, status:p.status, resp:p.resp, created_by:p.created_by||null}),
+    body: JSON.stringify({id:p.id, label:p.label, status:p.status, resp:p.resp, created_by:p.created_by||null, urgencia:p.urgencia||2, importancia:p.importancia||2, fecha:p.fecha||null}),
     headers:{...SB_H,"Prefer":"resolution=merge-duplicates,return=representation"}}),
   deletePendiente: (id)=> sbFetch(`/pendientes?id=eq.${id}`, {method:"DELETE"}),
   // ── Tarjetas ──
@@ -647,7 +647,7 @@ export default function App() {
       )}
       {page===2 && <PendientesPage currentUser={currentUser} pendientes={pendientes} setPendientes={setPendientes} tasks={tasks} setTasks={setTasks} persistTask={persistTask} notifyAssigned={notifyAssigned} notifyNewTask={notifyNewTask} selectedMonth={selectedMonth}/>}
       {page===3 && <TarjetasPage currentUser={currentUser}/>}
-      {page===4 && <ReferenciaCombPage currentUser={currentUser}/>}
+      {page===4 && <ReferenciaCombPage currentUser={currentUser} tasks={tasks}/>}
 
       {/* ── MOBILE BOTTOM NAV ── */}
       {mob && (
@@ -1245,7 +1245,7 @@ function CalendarPage({tasks,comments,currentUser,selectedMonth,setSelectedMonth
 // ─────────────────────────────────────────────
 // PAGE 4 — ROADMAP · CIERRE · ICEO (combinada)
 // ─────────────────────────────────────────────
-function ReferenciaCombPage({currentUser}) {
+function ReferenciaCombPage({currentUser, tasks=[]}) {
   const mob = useIsMobile();
   const [subTab, setSubTab] = useState("roadmap");
   const TABS = [
@@ -1255,7 +1255,6 @@ function ReferenciaCombPage({currentUser}) {
   ];
   return (
     <div style={{minHeight:"60vh"}}>
-      {/* Sub-tabs */}
       <div style={{background:"white",borderBottom:"1px solid #e0ddd8",padding:mob?"0 12px":"0 24px",display:"flex",gap:0,position:"sticky",top:mob?50:46,zIndex:90}}>
         {TABS.map(t=>(
           <button key={t.id} onClick={()=>setSubTab(t.id)}
@@ -1267,7 +1266,7 @@ function ReferenciaCombPage({currentUser}) {
           </button>
         ))}
       </div>
-      {subTab==="roadmap" && <RoadmapPage/>}
+      {subTab==="roadmap" && <RoadmapPage tasks={tasks}/>}
       {subTab==="cierre"  && <CierreMesPage currentUser={currentUser}/>}
       {subTab==="iceo"    && <IceoPage/>}
     </div>
@@ -1275,13 +1274,25 @@ function ReferenciaCombPage({currentUser}) {
 }
 
 
-function RoadmapPage() {
+function RoadmapPage({tasks=[]}) {
   const mob = useIsMobile();
   const [showPast, setShowPast] = useState(false);
   const [showSectionPasts, setShowSectionPasts] = useState({});
+  const [showCalHitos, setShowCalHitos] = useState(true);
   const NOW = new Date();
   const todayMonth = NOW.getMonth()+1;
   const todayDay   = NOW.getDate();
+
+  // Hitos agregados desde el calendario
+  const MESES_NOM = ["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+  const calHitos = tasks
+    .filter(t=>t.type==="hito" && !t.fixed)
+    .sort((a,b)=>a.month-b.month||a.day-b.day)
+    .map(t=>({
+      id:t.id, title:t.title, monthNum:t.month, day:t.day,
+      date:`${t.day} ${MESES_NOM[t.month]}`,
+      resp:t.resp, status:t.status,
+    }));
 
   const isPastItem = (item) => {
     if(item.monthNum < todayMonth) return true;
@@ -1324,6 +1335,31 @@ function RoadmapPage() {
       <div style={{fontFamily:"monospace",fontSize:10,fontWeight:700,letterSpacing:.14,textTransform:"uppercase",color:"#5b5f6b",marginBottom:5}}>Control de Gestión · Visión hacia adelante</div>
       <div style={{fontWeight:800,fontSize:mob?20:26,color:"#1a2f63",marginBottom:4}}>Roadmap <span style={{color:"#8a2438"}}>Jul – Dic 2026</span></div>
       <div style={{fontSize:12,color:"#5b5f6b",marginBottom:16}}>Hitos relevantes del segundo semestre.</div>
+
+      {/* Hitos desde el calendario */}
+      {calHitos.length>0 && (
+        <div style={{background:"white",borderRadius:10,border:"1px solid #dad6cc",overflow:"hidden",marginBottom:16}}>
+          <button onClick={()=>setShowCalHitos(s=>!s)}
+            style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"11px 16px",background:"#1a2f63",border:"none",cursor:"pointer",textAlign:"left"}}>
+            <span style={{fontSize:13,fontWeight:800,color:"white"}}>🔴 Hitos desde el calendario</span>
+            <span style={{marginLeft:"auto",fontSize:11,color:"rgba(255,255,255,.7)"}}>{calHitos.length} hitos · {showCalHitos?"Colapsar":"Ver"}</span>
+          </button>
+          {showCalHitos && (
+            <div style={{padding:"12px 14px",display:"flex",flexDirection:"column",gap:6}}>
+              {calHitos.map(h=>{
+                const past = h.monthNum<todayMonth||(h.monthNum===todayMonth&&h.day<todayDay);
+                return (
+                  <div key={h.id} style={{display:"flex",gap:8,alignItems:"center",background:past?"#f5f3ee":"#fafaf8",border:"1px solid #ebebeb",borderRadius:7,padding:"8px 12px",opacity:past?0.6:1}}>
+                    <span style={{fontFamily:"monospace",fontWeight:700,fontSize:10,color:"white",background:past?"#aaa":"#8a2438",borderRadius:5,padding:"3px 7px",whiteSpace:"nowrap",flexShrink:0}}>{h.date}</span>
+                    <span style={{fontSize:12.5,fontWeight:600,color:"#272a33",flex:1,lineHeight:1.3,textDecoration:past?"line-through":undefined}}>{h.title.replace("⚠️ ","")}</span>
+                    {h.resp&&h.resp.length>0&&<div style={{display:"flex",gap:2}}>{h.resp.slice(0,3).map(uid=><Avatar key={uid} uid={uid} size={16}/>)}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Hitos pasados colapsados */}
       {pastSections.length>0 && (
@@ -1411,8 +1447,24 @@ function PendientesPage({currentUser, pendientes, setPendientes, tasks, setTasks
   const mob = useIsMobile();
   const [editId, setEditId]   = useState(null);
   const [showNew, setShowNew] = useState(false);
-  const [newItem, setNewItem] = useState({label:"",status:"por iniciar",resp:[],fecha:""});
+  const [newItem, setNewItem] = useState({label:"",status:"por iniciar",resp:[],fecha:"",urgencia:2,importancia:2});
   const [saving, setSaving]   = useState(false);
+  const [vista, setVista]     = useState("lista"); // lista | matriz
+
+  const ACTIVOS_STATUS = ["por iniciar","en ajuste","en proceso"];
+  const INACTIVOS_STATUS = ["listo","no válido"];
+
+  // Ordenar: activos primero (por puntaje desc), luego inactivos al final
+  const sortedPendientes = [...pendientes].sort((a,b) => {
+    const aActivo = ACTIVOS_STATUS.includes(a.status);
+    const bActivo = ACTIVOS_STATUS.includes(b.status);
+    if(aActivo && !bActivo) return -1;
+    if(!aActivo && bActivo) return 1;
+    // Dentro de activos: ordenar por puntaje (urgencia * importancia) desc
+    const scoreA = (a.urgencia||2) * (a.importancia||2);
+    const scoreB = (b.urgencia||2) * (b.importancia||2);
+    return scoreB - scoreA;
+  });
 
   async function saveEdit(id) {
     const p = pendientes.find(x=>x.id===id);
@@ -1430,68 +1482,98 @@ function PendientesPage({currentUser, pendientes, setPendientes, tasks, setTasks
     try {
       await db.upsertPendiente(p);
       setPendientes(prev=>[...prev,p]);
-
-      // Si tiene fecha, crear tarea en el calendario
       if(newItem.fecha) {
         const [year, month, day] = newItem.fecha.split('-').map(Number);
-        const newTask = {
-          id: `t_pend_${Date.now()}`,
-          month, day,
-          type: "hito",
-          title: `⚠️ ${newItem.label}`,
-          resp: newItem.resp,
-          notes: `Pendiente estratégico creado desde la página de Pendientes`,
-          fixed: false,
-          status: "pendiente",
-        };
-        if(setTasks) setTasks(prev=>[...prev, newTask]);
+        const newTask = {id:`t_pend_${Date.now()}`,month,day,type:"hito",title:`⚠️ ${newItem.label}`,resp:newItem.resp,notes:`Pendiente estratégico`,fixed:false,status:"pendiente"};
+        if(setTasks) setTasks(prev=>[...prev,newTask]);
         if(persistTask) await persistTask(newTask);
-
-        // Notificar a admins de nueva tarea
-        if(notifyNewTask) await notifyNewTask(newTask);
       }
-
-      // Notificar a responsables asignados
-      if(notifyAssigned && newItem.resp.length > 0) {
-        const fakeTask = {id: p.id, title: p.label, day: newItem.fecha ? parseInt(newItem.fecha.split('-')[2]) : null, resp: newItem.resp};
+      if(newItem.resp.length>0) {
         for(const uid of newItem.resp) {
-          if(uid !== currentUser?.id) {
-            await db.addNotification({
-              user_id: uid,
-              type: "asignado",
-              message: `${USERS.find(u=>u.id===currentUser?.id)?.name||"Alguien"} te asignó al pendiente: "${newItem.label}"`,
-              task_id: p.id,
-              task_title: newItem.label,
-              created_by: currentUser?.id||null,
-              read: false,
-            });
+          if(uid!==currentUser?.id) {
+            await db.addNotification({user_id:uid,type:"asignado",message:`${USERS.find(u=>u.id===currentUser?.id)?.name||"Alguien"} te asignó al pendiente: "${newItem.label}"`,task_id:p.id,task_title:newItem.label,created_by:currentUser?.id||null,read:false});
           }
         }
       }
-
     } catch(e){console.error(e);}
     setSaving(false);
-    setNewItem({label:"",status:"por iniciar",resp:[],fecha:""});
+    setNewItem({label:"",status:"por iniciar",resp:[],fecha:"",urgencia:2,importancia:2});
     setShowNew(false);
   }
 
   async function deleteItem(id) {
     if(!window.confirm("¿Eliminar este pendiente?")) return;
-    try {
-      await db.deletePendiente(id);
-      setPendientes(prev=>prev.filter(p=>p.id!==id));
-    } catch(e){console.error(e);}
+    try { await db.deletePendiente(id); setPendientes(prev=>prev.filter(p=>p.id!==id)); } catch(e){console.error(e);}
   }
 
   const statusBadge = (status) => {
     const c = STATUS_CONFIG[status] || STATUS_CONFIG["por iniciar"];
+    return <span style={{fontFamily:"monospace",fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:.05,padding:"3px 8px",borderRadius:20,whiteSpace:"nowrap",flexShrink:0,background:c.bg,color:c.color,border:`1px solid ${c.border}`,textDecoration:status==="no válido"?"line-through":undefined}}>{status}</span>;
+  };
+
+  const ScoreBtn = ({val, current, onClick, color}) => (
+    <button onClick={onClick} style={{width:mob?32:26,height:mob?32:26,borderRadius:6,border:`2px solid ${current===val?color:"#e0e0e0"}`,background:current===val?color:"white",color:current===val?"white":"#888",fontWeight:800,fontSize:mob?13:11,cursor:"pointer"}}>
+      {val}
+    </button>
+  );
+
+  // Vista de matriz 2D (Urgencia x Importancia)
+  const MatrizView = () => {
+    const activos = pendientes.filter(p=>ACTIVOS_STATUS.includes(p.status));
+    // Crear cuadrícula 3x3
+    const celdas = {};
+    for(let u=1;u<=3;u++) for(let i=1;i<=3;i++) celdas[`${u}-${i}`]=[];
+    activos.forEach(p=>{
+      const key = `${p.urgencia||2}-${p.importancia||2}`;
+      if(celdas[key]) celdas[key].push(p);
+    });
+    const getBg = (u,i) => {
+      const score = u*i;
+      if(score>=6) return "#fff0f0"; // alto
+      if(score>=4) return "#fffbe6"; // medio
+      return "#f0f8f0"; // bajo
+    };
     return (
-      <span style={{fontFamily:"monospace",fontSize:9,fontWeight:700,textTransform:"uppercase",
-        letterSpacing:.05,padding:"3px 8px",borderRadius:20,whiteSpace:"nowrap",flexShrink:0,
-        background:c.bg,color:c.color,border:`1px solid ${c.border}`,
-        textDecoration:status==="no válido"?"line-through":undefined}}>
-        {status}
-      </span>
+      <div style={{overflowX:"auto"}}>
+        <div style={{fontSize:11,color:"#aaa",marginBottom:8,textAlign:"center"}}>Urgencia (eje X) × Importancia (eje Y)</div>
+        <div style={{display:"grid",gridTemplateColumns:"60px 1fr 1fr 1fr",gap:4,minWidth:340}}>
+          {/* Headers */}
+          <div/>
+          {[1,2,3].map(u=>(
+            <div key={u} style={{textAlign:"center",fontFamily:"monospace",fontWeight:700,fontSize:11,color:"#1a2f63",padding:"6px 0",background:"#f0f4ff",borderRadius:6}}>
+              U={u}
+            </div>
+          ))}
+          {/* Filas */}
+          {[3,2,1].map(i=>(
+            <>
+              <div key={`label-${i}`} style={{display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontWeight:700,fontSize:11,color:"#1a2f63",background:"#f0f4ff",borderRadius:6}}>I={i}</div>
+              {[1,2,3].map(u=>{
+                const items = celdas[`${u}-${i}`];
+                const bg = getBg(u,i);
+                return (
+                  <div key={`${u}-${i}`} style={{background:bg,borderRadius:8,padding:6,minHeight:60,border:"1px solid #e8e5e0"}}>
+                    {items.map(p=>(
+                      <div key={p.id} style={{fontSize:10,background:"white",borderRadius:5,padding:"3px 6px",marginBottom:3,lineHeight:1.3,boxShadow:"0 1px 3px rgba(0,0,0,.07)"}}>
+                        {p.label}
+                      </div>
+                    ))}
+                    {items.length===0 && <div style={{color:"#ddd",fontSize:9,textAlign:"center",marginTop:8}}>—</div>}
+                  </div>
+                );
+              })}
+            </>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:10,marginTop:10,justifyContent:"center",flexWrap:"wrap"}}>
+          {[{bg:"#fff0f0",label:"Alta prioridad (U×I ≥ 6)"},{bg:"#fffbe6",label:"Media prioridad"},{bg:"#f0f8f0",label:"Baja prioridad"}].map(l=>(
+            <div key={l.bg} style={{display:"flex",alignItems:"center",gap:5,fontSize:10.5,color:"#666"}}>
+              <span style={{width:12,height:12,borderRadius:3,background:l.bg,border:"1px solid #ddd",display:"inline-block"}}/>
+              {l.label}
+            </div>
+          ))}
+        </div>
+      </div>
     );
   };
 
@@ -1499,668 +1581,189 @@ function PendientesPage({currentUser, pendientes, setPendientes, tasks, setTasks
     <div style={{padding:mob?"12px 12px 70px":"24px 32px 60px",maxWidth:900,margin:"0 auto"}}>
       <div style={{fontFamily:"monospace",fontSize:10,fontWeight:700,letterSpacing:.14,textTransform:"uppercase",color:"#5b5f6b",marginBottom:5}}>Control de Gestión</div>
       <div style={{fontWeight:800,fontSize:mob?20:26,color:"#1a2f63",marginBottom:4}}>⚠️ Pendientes <span style={{color:"#8a2438"}}>estratégicos</span></div>
-      <div style={{fontSize:12,color:"#5b5f6b",marginBottom:16}}>Todos pueden agregar y editar pendientes. Los cambios se guardan en tiempo real.</div>
+      <div style={{fontSize:12,color:"#5b5f6b",marginBottom:12}}>Todos pueden agregar y editar. Los cambios se guardan en tiempo real.</div>
 
-      <div style={{background:"white",borderRadius:10,border:"1px solid #dad6cc",overflow:"hidden",marginBottom:16}}>
-        {/* Header */}
-        <div style={{background:"#1a2f63",color:"white",padding:"11px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <span style={{fontWeight:800,fontSize:mob?13:14}}>📋 Listado de pendientes ({pendientes.length})</span>
-          <button onClick={()=>setShowNew(true)}
-            style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.3)",color:"white",borderRadius:7,padding:"4px 12px",cursor:"pointer",fontSize:12,fontWeight:700}}>
-            + Nuevo
+      {/* Toggle lista/matriz */}
+      <div style={{display:"flex",gap:0,marginBottom:14,background:"#f0ede8",borderRadius:10,padding:3,maxWidth:300}}>
+        {[{id:"lista",label:"📋 Lista"},{id:"matriz",label:"📊 Matriz 2D"}].map(v=>(
+          <button key={v.id} onClick={()=>setVista(v.id)}
+            style={{flex:1,padding:"7px 0",borderRadius:8,border:"none",background:vista===v.id?"white":"transparent",
+              color:vista===v.id?"#1a2f63":"#888",fontWeight:700,fontSize:12.5,cursor:"pointer",
+              boxShadow:vista===v.id?"0 1px 4px rgba(0,0,0,.12)":"none",transition:"all .15s"}}>
+            {v.label}
           </button>
+        ))}
+      </div>
+
+      {/* Matriz 2D */}
+      {vista==="matriz" && (
+        <div style={{background:"white",borderRadius:10,border:"1px solid #dad6cc",padding:"16px 18px",marginBottom:16}}>
+          <MatrizView/>
         </div>
+      )}
 
-        {/* Lista */}
-        {pendientes.length===0 && !showNew && (
-          <div style={{padding:"24px",textAlign:"center",color:"#aaa",fontSize:13}}>Sin pendientes. Agrega uno con el botón "+" arriba.</div>
-        )}
+      {/* Lista */}
+      {vista==="lista" && (
+        <div style={{background:"white",borderRadius:10,border:"1px solid #dad6cc",overflow:"hidden",marginBottom:16}}>
+          <div style={{background:"#1a2f63",color:"white",padding:"11px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <span style={{fontWeight:800,fontSize:mob?13:14}}>📋 Listado ({pendientes.length})</span>
+            <button onClick={()=>setShowNew(true)} style={{background:"rgba(255,255,255,.2)",border:"1px solid rgba(255,255,255,.3)",color:"white",borderRadius:7,padding:"4px 12px",cursor:"pointer",fontSize:12,fontWeight:700}}>+ Nuevo</button>
+          </div>
 
-        {pendientes.map((p,i)=>(
-          <div key={p.id} style={{borderBottom:i<pendientes.length-1?"1px dashed #ebebeb":undefined,background:i%2===0?"#fafaf8":"white"}}>
-            {editId===p.id ? (
-              <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:10}}>
-                <input value={p.label}
-                  onChange={e=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,label:e.target.value}:x))}
-                  style={{width:"100%",padding:"7px 10px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none"}}/>
-                <div>
-                  <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Fecha límite (opcional)</div>
-                  <input type="date" value={p.fecha||""} onChange={e=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,fecha:e.target.value}:x))}
-                    style={{padding:"7px 10px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none",width:mob?"100%":"auto"}}/>
-                </div>
-                <div>
-                  <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Estado</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                    {STATUS_OPTIONS.map(s=>{ const c=STATUS_CONFIG[s]; return (
-                      <button key={s} onClick={()=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,status:s}:x))}
-                        style={{padding:mob?"6px 11px":"3px 10px",borderRadius:20,border:`2px solid ${p.status===s?c.color:"#e0e0e0"}`,
-                          background:p.status===s?c.bg:"white",color:p.status===s?c.color:"#888",
-                          fontSize:mob?12:11,fontWeight:700,cursor:"pointer",minHeight:mob?34:undefined}}>
-                        {s}
+          {sortedPendientes.length===0 && !showNew && <div style={{padding:"24px",textAlign:"center",color:"#aaa",fontSize:13}}>Sin pendientes.</div>}
+
+          {sortedPendientes.map((p,i)=>{
+            const isInactivo = INACTIVOS_STATUS.includes(p.status);
+            return (
+              <div key={p.id} style={{borderBottom:i<sortedPendientes.length-1?"1px dashed #ebebeb":undefined,
+                background:i%2===0?"#fafaf8":"white",
+                opacity:isInactivo?0.5:1,
+                filter:isInactivo?"grayscale(0.3)":"none",
+                transition:"opacity .2s"}}>
+                {editId===p.id ? (
+                  <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:10}}>
+                    <input value={p.label} onChange={e=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,label:e.target.value}:x))}
+                      style={{width:"100%",padding:"7px 10px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none"}}/>
+                    <div>
+                      <div style={{fontSize:10,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6,fontWeight:700}}>Fecha límite</div>
+                      <input type="date" value={p.fecha||""} onChange={e=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,fecha:e.target.value}:x))}
+                        style={{padding:"7px 10px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none",width:mob?"100%":"auto"}}/>
+                    </div>
+                    {/* Urgencia */}
+                    <div>
+                      <div style={{fontSize:10,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6,fontWeight:700}}>Urgencia (1=baja, 3=alta)</div>
+                      <div style={{display:"flex",gap:6}}>
+                        {[1,2,3].map(v=><ScoreBtn key={v} val={v} current={p.urgencia||2} color="#e34948" onClick={()=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,urgencia:v}:x))}/>)}
+                      </div>
+                    </div>
+                    {/* Importancia */}
+                    <div>
+                      <div style={{fontSize:10,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6,fontWeight:700}}>Importancia (1=baja, 3=alta)</div>
+                      <div style={{display:"flex",gap:6}}>
+                        {[1,2,3].map(v=><ScoreBtn key={v} val={v} current={p.importancia||2} color="#1a2f63" onClick={()=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,importancia:v}:x))}/>)}
+                      </div>
+                    </div>
+                    {/* Estado */}
+                    <div>
+                      <div style={{fontSize:10,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6,fontWeight:700}}>Estado</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                        {STATUS_OPTIONS.map(s=>{ const c=STATUS_CONFIG[s]; return (
+                          <button key={s} onClick={()=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,status:s}:x))}
+                            style={{padding:mob?"6px 11px":"3px 10px",borderRadius:20,border:`2px solid ${p.status===s?c.color:"#e0e0e0"}`,background:p.status===s?c.bg:"white",color:p.status===s?c.color:"#888",fontSize:mob?12:11,fontWeight:700,cursor:"pointer",minHeight:mob?34:undefined}}>
+                            {s}
+                          </button>
+                        );})}
+                      </div>
+                    </div>
+                    {/* Responsables */}
+                    <div>
+                      <div style={{fontSize:10,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6,fontWeight:700}}>Responsables</div>
+                      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                        {USERS.map(u=>{ const a=(p.resp||[]).includes(u.id); return (
+                          <button key={u.id} onClick={()=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,resp:a?x.resp.filter(r=>r!==u.id):[...(x.resp||[]),u.id]}:x))}
+                            style={{display:"flex",alignItems:"center",gap:4,padding:mob?"7px 11px":"4px 9px",borderRadius:20,border:`2px solid ${a?u.color:"#e0e0e0"}`,background:a?u.color+"18":"white",color:a?u.color:"#888",fontSize:mob?12.5:11,fontWeight:600,cursor:"pointer",minHeight:mob?38:undefined}}>
+                            <Avatar uid={u.id} size={mob?16:13}/>{u.name.split(" ")[0]}{a&&" ✓"}
+                          </button>
+                        );})}
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                      <button onClick={()=>setEditId(null)} style={{background:"white",border:"1.5px solid #ccc",borderRadius:7,padding:"6px 14px",cursor:"pointer",fontSize:12}}>Cancelar</button>
+                      <button onClick={()=>saveEdit(p.id)} disabled={saving} style={{background:"#1a2f63",color:"white",border:"none",borderRadius:7,padding:"6px 16px",cursor:"pointer",fontSize:12,fontWeight:700,opacity:saving?.7:1}}>
+                        {saving?"Guardando...":"Guardar"}
                       </button>
-                    );})}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Responsables</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                    {USERS.map(u=>{ const a=(p.resp||[]).includes(u.id); return (
-                      <button key={u.id}
-                        onClick={()=>setPendientes(prev=>prev.map(x=>x.id===p.id?{...x,resp:a?x.resp.filter(r=>r!==u.id):[...(x.resp||[]),u.id]}:x))}
-                        style={{display:"flex",alignItems:"center",gap:4,padding:mob?"7px 11px":"4px 9px",borderRadius:20,border:`2px solid ${a?u.color:"#e0e0e0"}`,
-                          background:a?u.color+"18":"white",color:a?u.color:"#888",fontSize:mob?12.5:11,fontWeight:600,cursor:"pointer",minHeight:mob?38:undefined}}>
-                        <Avatar uid={u.id} size={mob?16:13}/>{u.name.split(" ")[0]}{a&&" ✓"}
-                      </button>
-                    );})}
-                  </div>
-                </div>
-                <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-                  <button onClick={()=>setEditId(null)} style={{background:"white",border:"1.5px solid #ccc",borderRadius:7,padding:"6px 14px",cursor:"pointer",fontSize:12}}>Cancelar</button>
-                  <button onClick={()=>saveEdit(p.id)} disabled={saving}
-                    style={{background:"#1a2f63",color:"white",border:"none",borderRadius:7,padding:"6px 16px",cursor:"pointer",fontSize:12,fontWeight:700,opacity:saving?.7:1}}>
-                    {saving?"Guardando...":"Guardar"}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div style={{display:"flex",alignItems:"center",gap:10,padding:mob?"10px 12px":"12px 16px"}}>
-                {statusBadge(p.status)}
-                <span style={{fontSize:mob?12.5:13,fontWeight:500,flex:1,lineHeight:1.4,
-                  textDecoration:p.status==="no válido"?"line-through":"none",
-                  color:p.status==="no válido"?"#aaa":"#272a33"}}>{p.label}
-                  {p.fecha && <span style={{fontSize:10,color:"#1a2f63",background:"#dfe7f7",borderRadius:10,padding:"1px 7px",marginLeft:6,fontWeight:600}}>
-                    📅 {new Date(p.fecha+"T12:00:00").toLocaleDateString("es-CL",{day:"2-digit",month:"2-digit"})}
-                  </span>}
-                </span>
-                {(p.resp||[]).length>0 && (
-                  <div style={{display:"flex",gap:2,flexShrink:0}}>
-                    {(p.resp||[]).map(uid=><Avatar key={uid} uid={uid} size={mob?20:18}/>)}
+                ) : (
+                  <div style={{display:"flex",alignItems:"center",gap:10,padding:mob?"10px 12px":"12px 16px"}}>
+                    {/* Score badge */}
+                    {!isInactivo && (
+                      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1,flexShrink:0,minWidth:32}}>
+                        <span style={{fontSize:8,color:"#e34948",fontWeight:700}}>U{p.urgencia||2}</span>
+                        <span style={{fontSize:10,background:(p.urgencia||2)*(p.importancia||2)>=6?"#e34948":(p.urgencia||2)*(p.importancia||2)>=4?"#f0c020":"#1d6b53",color:"white",borderRadius:6,padding:"1px 5px",fontFamily:"monospace",fontWeight:800}}>{(p.urgencia||2)*(p.importancia||2)}</span>
+                        <span style={{fontSize:8,color:"#1a2f63",fontWeight:700}}>I{p.importancia||2}</span>
+                      </div>
+                    )}
+                    {statusBadge(p.status)}
+                    <span style={{fontSize:mob?12.5:13,fontWeight:500,flex:1,lineHeight:1.4,
+                      textDecoration:p.status==="no válido"?"line-through":"none",
+                      color:p.status==="no válido"?"#aaa":"#272a33"}}>
+                      {p.label}
+                      {p.fecha && <span style={{fontSize:10,color:"#1a2f63",background:"#dfe7f7",borderRadius:10,padding:"1px 7px",marginLeft:6,fontWeight:600}}>
+                        📅 {new Date(p.fecha+"T12:00:00").toLocaleDateString("es-CL",{day:"2-digit",month:"2-digit"})}
+                      </span>}
+                    </span>
+                    {(p.resp||[]).length>0 && <div style={{display:"flex",gap:2,flexShrink:0}}>{(p.resp||[]).map(uid=><Avatar key={uid} uid={uid} size={mob?20:18}/>)}</div>}
+                    <div style={{display:"flex",gap:5,flexShrink:0}}>
+                      <button onClick={()=>setEditId(p.id)} style={{background:"#f0f4ff",border:"1px solid #c0d0f0",color:"#3b4d8c",borderRadius:6,padding:mob?"6px 11px":"3px 9px",cursor:"pointer",fontSize:mob?12:11,fontWeight:600,minHeight:mob?34:undefined}}>Editar</button>
+                      <button onClick={()=>deleteItem(p.id)} style={{background:"#fff0f0",border:"1px solid #f0c0c0",color:"#c0392b",borderRadius:6,padding:mob?"6px 10px":"3px 8px",cursor:"pointer",fontSize:mob?12:11,minHeight:mob?34:undefined}}>✕</button>
+                    </div>
                   </div>
                 )}
-                <div style={{display:"flex",gap:5,flexShrink:0}}>
-                  <button onClick={()=>setEditId(p.id)}
-                    style={{background:"#f0f4ff",border:"1px solid #c0d0f0",color:"#3b4d8c",borderRadius:6,padding:mob?"6px 11px":"3px 9px",cursor:"pointer",fontSize:mob?12:11,fontWeight:600,minHeight:mob?34:undefined}}>
-                    Editar
-                  </button>
-                  <button onClick={()=>deleteItem(p.id)}
-                    style={{background:"#fff0f0",border:"1px solid #f0c0c0",color:"#c0392b",borderRadius:6,padding:mob?"6px 10px":"3px 8px",cursor:"pointer",fontSize:mob?12:11,minHeight:mob?34:undefined}}>
-                    ✕
-                  </button>
-                </div>
               </div>
-            )}
-          </div>
-        ))}
-
-        {/* Formulario nuevo */}
-        {showNew && (
-          <div style={{padding:"14px 16px",background:"#f0f4ff",borderTop:"1px solid #c0d0f0",display:"flex",flexDirection:"column",gap:10}}>
-            <div style={{fontWeight:700,fontSize:13,color:"#1a2f63"}}>Nuevo pendiente</div>
-            <input value={newItem.label} onChange={e=>setNewItem(p=>({...p,label:e.target.value}))}
-              placeholder="Descripción del pendiente..."
-              style={{width:"100%",padding:mob?"10px 12px":"8px 11px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none"}}
-              autoFocus/>
-            <div>
-              <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Fecha límite (opcional — aparece en el calendario)</div>
-              <input type="date" value={newItem.fecha} onChange={e=>setNewItem(p=>({...p,fecha:e.target.value}))}
-                style={{padding:"8px 11px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none",width:mob?"100%":"auto"}}/>
-              {newItem.fecha && <span style={{fontSize:11,color:"#1d6b53",marginLeft:8}}>✓ Se creará un hito en el calendario</span>}
-            </div>
-            <div>
-              <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Estado</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                {STATUS_OPTIONS.map(s=>{ const c=STATUS_CONFIG[s]; return (
-                  <button key={s} onClick={()=>setNewItem(p=>({...p,status:s}))}
-                    style={{padding:mob?"6px 11px":"3px 10px",borderRadius:20,border:`2px solid ${newItem.status===s?c.color:"#e0e0e0"}`,
-                      background:newItem.status===s?c.bg:"white",color:newItem.status===s?c.color:"#888",
-                      fontSize:mob?12:11,fontWeight:700,cursor:"pointer",minHeight:mob?34:undefined}}>
-                    {s}
-                  </button>
-                );})}
-              </div>
-            </div>
-            <div>
-              <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Responsables</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                {USERS.map(u=>{ const a=newItem.resp.includes(u.id); return (
-                  <button key={u.id} onClick={()=>setNewItem(p=>({...p,resp:a?p.resp.filter(r=>r!==u.id):[...p.resp,u.id]}))}
-                    style={{display:"flex",alignItems:"center",gap:4,padding:mob?"7px 11px":"4px 9px",borderRadius:20,border:`2px solid ${a?u.color:"#e0e0e0"}`,
-                      background:a?u.color+"18":"white",color:a?u.color:"#888",fontSize:mob?12.5:11,fontWeight:600,cursor:"pointer",minHeight:mob?38:undefined}}>
-                    <Avatar uid={u.id} size={mob?16:13}/>{u.name.split(" ")[0]}{a&&" ✓"}
-                  </button>
-                );})}
-              </div>
-            </div>
-            <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
-              <button onClick={()=>{setShowNew(false);setNewItem({label:"",status:"por iniciar",resp:[],fecha:""});}}
-                style={{background:"white",border:"1.5px solid #ccc",borderRadius:7,padding:"6px 14px",cursor:"pointer",fontSize:12}}>Cancelar</button>
-              <button onClick={addNew} disabled={saving||!newItem.label.trim()}
-                style={{background:newItem.label.trim()?"#1a2f63":"#aaa",color:"white",border:"none",borderRadius:7,padding:"6px 16px",cursor:newItem.label.trim()?"pointer":"default",fontSize:12,fontWeight:700}}>
-                {saving?"Guardando...":"Agregar"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────
-// PAGE 4 — CIERRE DE MES
-// ─────────────────────────────────────────────
-
-const ACTIVIDADES_CIERRE = [
-  {id:"c1",  fase:"descarga", bold:true,  titulo:"Carga de actividad y prestaciones de Pabellón en sistema al día", responsable:"Katherine Figueroa",       area:"Pabellón"},
-  {id:"c2",  fase:"descarga", bold:true,  titulo:"Provisión de pacientes acostados",                                  responsable:"Cecilia I. / Eduardo M.",   area:"Hospitalización"},
-  {id:"c3",  fase:"descarga", bold:false, titulo:"Envío Ajustes MEMO y cálculo distribución",                         responsable:"Daniela Araya",             area:"Contabilidad"},
-  {id:"c4",  fase:"descarga", bold:false, titulo:"Envío de consumo de servicios, ajustes de stocks, Farmacia VP y Eco",responsable:"Eduardo Morales",          area:"CdG"},
-  {id:"c5",  fase:"descarga", bold:false, titulo:"Envío de Liquidación de Centro Médico, Dental, Urgencias, Fertilidad, Poli.", responsable:"Macarena F. / Daniela M.", area:"Administración"},
-  {id:"c6",  fase:"descarga", bold:false, titulo:"Envío provisión costos con áreas MK, TI, Mantenciones para validación de cierre", responsable:"Joaquín P. / Daniela R.", area:"CdG"},
-  {id:"c7",  fase:"descarga", bold:true,  titulo:"Bases preliminar de Prestaciones, MEI y HM a fichas",              responsable:"Eduardo Morales",            area:"CdG"},
-  {id:"c8",  fase:"descarga", bold:true,  titulo:"Ingreso de HM x UEN",                                              responsable:"Isidora Sepúlveda",          area:"CdG"},
-  {id:"c9",  fase:"descarga", bold:false, titulo:"Cálculo y contabilización de GRD/GES/NoGes",                       responsable:"Isidora Sepúlveda",          area:"CdG"},
-  {id:"c10", fase:"descarga", bold:false, titulo:"Envío Informe Resumen CxC al cierre de Mes",                       responsable:"Francisca Montecinos",       area:"Cobranza"},
-  {id:"c11", fase:"descarga", bold:false, titulo:"Envío de estimación Turnos Méd. y distribución sueldos y gratif.", responsable:"Paula Coronado",             area:"RRHH"},
-  {id:"c12", fase:"descarga", bold:false, titulo:"Provisión Vacaciones y Finiquitos",                                 responsable:"Paula Coronado",             area:"RRHH"},
-  {id:"c13", fase:"carga",    bold:true,  titulo:"Entrega de Base Ingresos y Reval x Fichas y MEI del mes, y Comp Cont.", responsable:"Eduardo Morales",       area:"CdG",            turno:"AM"},
-  {id:"c14", fase:"carga",    bold:true,  titulo:"Centralización de remuneraciones",                                  responsable:"Paula Coronado",             area:"RRHH",           turno:"AM"},
-  {id:"c15", fase:"carga",    bold:true,  titulo:"Provisión proyección prestaciones y HM",                            responsable:"Bastián Retamal",            area:"CdG",            turno:"AM"},
-  {id:"c16", fase:"carga",    bold:false, titulo:"Cálculo final deterioro CxC",                                       responsable:"Isidora Sepúlveda",          area:"CdG"},
-  {id:"c17", fase:"carga",    bold:false, titulo:"Ingresos devengados y Contabilización Hemosan",                     responsable:"Eduardo M. / Paola V.",      area:"CdG"},
-  {id:"c18", fase:"carga",    bold:true,  titulo:"Consumo pacientes y provisión consumos",                            responsable:"Eduardo M. / Bastián R.",    area:"CdG"},
-  {id:"c19", fase:"carga",    bold:false, titulo:"Envío data indicadores RRHH",                                       responsable:"Paula Coronado",             area:"RRHH"},
-  {id:"c20", fase:"carga",    bold:false, titulo:"Envío de costos Turnos Médicos INFOGEST",                           responsable:"Paula C. / Fabiola M.",      area:"RRHH"},
-  {id:"c21", fase:"carga",    bold:false, titulo:"Cierre de Libros de compra y ventas, Determinación de IVA No Recuperable", responsable:"Contabilidad",       area:"Contabilidad"},
-  {id:"c22", fase:"carga",    bold:false, titulo:"Cierre de Bancos de todas las Sociedades",                          responsable:"Rodrigo Recabal",            area:"Tesorería"},
-  {id:"c23", fase:"carga",    bold:true,  titulo:"Entrega de Base Honorarios Médicos del mes en carpetas compartidas",responsable:"Margarita M. / Fabiola M.", area:"RRHH",           turno:"AM"},
-  {id:"c24", fase:"carga",    bold:false, titulo:"Flujo de efectivo",                                                 responsable:"Rodrigo Recabal",            area:"Tesorería",      turno:"PM"},
-  {id:"c25", fase:"eerr",     bold:false, titulo:"Cierre de Impuestos a la renta",                                    responsable:"Vania Larraín",              area:"Contabilidad",   turno:"AM"},
-  {id:"c26", fase:"eerr",     bold:false, titulo:"Cierre de VP",                                                      responsable:"Paola Valdebenito",          area:"Contabilidad",   turno:"AM"},
-  {id:"c27", fase:"eerr",     bold:true,  titulo:"Reunión Pre Cierre",                                                responsable:"RedSalud / Finanzas / Personas", area:"RedSalud",  turno:""},
-];
-
-// Datos de cierres pasados y futuros
-const CIERRES = [
-  {
-    mes:"Julio 2026", num:7, year:2026,
-    corteInicio:"26/06/2026", corteFin:"28/07/2026",
-    descarga:["Mié 29/07","Jue 30/07","Vie 31/07"],
-    carga:["Lun 03/08","Mar 04/08","Mié 05/08","Jue 06/08"],
-    pasado: false, actual: true,
-    nota:"Fecha de corte especial: incluye desde 26/06 por ajuste del cierre anterior."
-  },
-  {
-    mes:"Agosto 2026", num:8, year:2026,
-    corteInicio:"29/07/2026", corteFin:"27/08/2026",
-    descarga:["Jue 27/08","Vie 28/08","Lun 31/08"],
-    carga:["Mar 01/09","Mié 02/09","Jue 03/09","Vie 04/09"],
-    pasado: false, actual: false,
-  },
-  {
-    mes:"Septiembre 2026", num:9, year:2026,
-    corteInicio:"28/08/2026", corteFin:"28/09/2026",
-    descarga:["Lun 28/09","Mar 29/09","Mié 30/09"],
-    carga:["Jue 01/10","Vie 02/10","Lun 05/10","Mar 06/10"],
-    pasado: false, actual: false,
-  },
-  {
-    mes:"Octubre 2026", num:10, year:2026,
-    corteInicio:"29/09/2026", corteFin:"27/10/2026",
-    descarga:["Mié 28/10","Jue 29/10","Vie 30/10"],
-    carga:["Lun 02/11","Mar 03/11","Mié 04/11","Jue 05/11"],
-    pasado: false, actual: false,
-    nota:"31/10 es feriado (Día de las Iglesias Evangélicas), se excluye del cierre."
-  },
-  {
-    mes:"Noviembre 2026", num:11, year:2026,
-    corteInicio:"28/10/2026", corteFin:"25/11/2026",
-    descarga:["Jue 26/11","Vie 27/11","Lun 30/11"],
-    carga:["Mar 01/12","Mié 02/12","Jue 03/12","Vie 04/12"],
-    pasado: false, actual: false,
-  },
-];
-
-// Cierres ya realizados (para referencia histórica)
-const CIERRES_PASADOS = [
-  {
-    mes:"Enero 2026", num:1, year:2026,
-    corteInicio:"29/12/2025", corteFin:"27/01/2026",
-    descarga:["Mié 28/01","Jue 29/01","Vie 30/01"],
-    carga:["Lun 02/02","Mar 03/02","Mié 04/02","Jue 05/02"],
-    pasado:true,
-  },
-  {
-    mes:"Febrero 2026", num:2, year:2026,
-    corteInicio:"28/01/2026", corteFin:"24/02/2026",
-    descarga:["Mié 25/02","Jue 26/02","Vie 27/02"],
-    carga:["Lun 02/03","Mar 03/03","Mié 04/03","Jue 05/03"],
-    pasado:true,
-  },
-  {
-    mes:"Marzo 2026", num:3, year:2026,
-    corteInicio:"25/02/2026", corteFin:"26/03/2026",
-    descarga:["Vie 27/03","Lun 30/03","Mar 31/03"],
-    carga:["Mié 01/04","Jue 02/04","Lun 06/04","Mar 07/04"],
-    pasado:true,
-    nota:"3 y 4 de abril son Semana Santa (feriados), primer hábil es mié 01/04."
-  },
-  {
-    mes:"Abril 2026", num:4, year:2026,
-    corteInicio:"27/03/2026", corteFin:"27/04/2026",
-    descarga:["Mar 28/04","Mié 29/04","Jue 30/04"],
-    carga:["Lun 04/05","Mar 05/05","Mié 06/05","Jue 07/05"],
-    pasado:true,
-    nota:"1 de mayo es feriado, primer hábil del mes es lun 04/05."
-  },
-  {
-    mes:"Mayo 2026", num:5, year:2026,
-    corteInicio:"28/04/2026", corteFin:"26/05/2026",
-    descarga:["Mié 27/05","Jue 28/05","Vie 29/05"],
-    carga:["Lun 01/06","Mar 02/06","Mié 03/06","Jue 04/06"],
-    pasado:true,
-  },
-  {
-    mes:"Junio 2026", num:6, year:2026,
-    corteInicio:"27/05/2026", corteFin:"24/06/2026",
-    descarga:["Jue 25/06","Vie 26/06","Mar 30/06"],
-    carga:["Mié 01/07","Jue 02/07","Vie 03/07","Lun 06/07"],
-    pasado:true,
-    nota:"29/06 es feriado (San Pedro y San Pablo). 3° hábil salta al mar 30/06."
-  },
-];
-
-const FASE_CONFIG = {
-  descarga: {label:"Descarga y proyección", bg:"#1a2f63", fg:"white", light:"#dfe7f7", desc:"Últimos 3 días hábiles del mes: se carga actividad real y se proyectan días restantes"},
-  carga:    {label:"Reversa y carga real",  bg:"#1d6b53", fg:"white", light:"#e4f0ea", desc:"Primeros días hábiles del mes siguiente: se reversan proyecciones y se carga lo real"},
-  eerr:     {label:"EERR y Balance",        bg:"#5b3f8c", fg:"white", light:"#ece5f5", desc:"Cierre contable, impuestos y reunión pre-cierre con RedSalud"},
-};
-
-function CierreMesPage({currentUser}) {
-  const mob = useIsMobile();
-  // Todos los cierres juntos: pasados primero, luego futuros
-  const ALL_CIERRES = [...CIERRES_PASADOS, ...CIERRES];
-  const [selectedIdx, setSelectedIdx] = useState(CIERRES_PASADOS.length); // default = primer futuro (julio)
-
-  const cierre = ALL_CIERRES[selectedIdx];
-  const allDays = [...cierre.descarga, ...cierre.carga];
-
-  const getColBg = (d) => {
-    if (cierre.descarga.includes(d)) return '#1a2f63';
-    if (cierre.carga.slice(0,2).includes(d)) return '#1d6b53';
-    return '#5b3f8c';
-  };
-
-  const getActDays = (act) => {
-    const d = cierre.descarga;
-    const c = cierre.carga;
-    const map = {
-      c1:[d[0]], c2:[d[0]], c3:[d[0]],
-      c4:[d[1]], c5:[d[1]],
-      c6:[d[2]], c7:[d[2]], c8:[d[2]], c9:[d[2]], c10:[d[2]], c11:[d[2]], c12:[d[2]],
-      c13:[c[0]], c14:[c[0]], c15:[c[0]], c16:[c[0]], c17:[c[0]], c18:[c[0]], c19:[c[0]], c20:[c[0]], c21:[c[0]], c22:[c[0]],
-      c23:[c[1]], c24:[c[1]],
-      c25:[c[2]], c26:[c[2]],
-      c27:[c[3]],
-    };
-    return map[act.id] || [];
-  };
-
-  const FASE_COLORS = { descarga:'#1a2f63', carga:'#1d6b53', eerr:'#5b3f8c' };
-  const COL_W  = mob ? 52 : 80;
-  const LABEL_W= mob ? 160 : 360;
-  const RESP_W = mob ? 110 : 170;
-  const ROW_H  = mob ? 30 : 34;
-
-  // ── Descarga Excel ──
-  function downloadExcel(c) {
-    const doExport = (XLSX) => {
-      const allDays = [...c.descarga, ...c.carga];
-      const getActDaysLocal = (num) => {
-        const d=c.descarga, g=c.carga;
-        const map={1:[d[0]],2:[d[0]],3:[d[0]],4:[d[1]],5:[d[1]],
-          6:[d[2]],7:[d[2]],8:[d[2]],9:[d[2]],10:[d[2]],11:[d[2]],12:[d[2]],
-          13:[g[0]],14:[g[0]],15:[g[0]],16:[g[0]],17:[g[0]],18:[g[0]],19:[g[0]],20:[g[0]],21:[g[0]],22:[g[0]],
-          23:[g[1]],24:[g[1]],25:[g[2]],26:[g[2]],27:[g[3]]};
-        return map[num]||[];
-      };
-      const getDayColor = (d) => {
-        if(c.descarga.includes(d)) return '1A2F63';
-        const idx=c.carga.indexOf(d);
-        return idx<2?'1D6B53':'5B3F8C';
-      };
-
-      const wb = XLSX.utils.book_new();
-      const ws = {};
-      const range = {s:{r:0,c:0}, e:{r:0,c:0}};
-
-      // Fila 0: fecha corte
-      const titleCell = { v:`FECHA CORTE AL ${c.corteFin} INCLUIDO (desde ${c.corteInicio})${c.nota?' | '+c.nota:''}`, t:'s',
-        s:{font:{italic:true,color:{rgb:'555555'},sz:9},fill:{fgColor:{rgb:'FFFFFF'}}} };
-      ws[XLSX.utils.encode_cell({r:0,c:0})] = titleCell;
-      ws['!merges'] = [{s:{r:0,c:0},e:{r:0,c:3+allDays.length}}];
-
-      // Fila 1: headers meses
-      let groups=[];
-      allDays.forEach((d,i)=>{
-        const mNum=parseInt(d.split('/')[1]);
-        const mLabel=['','ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'][mNum];
-        if(!groups.length||groups[groups.length-1].label!==mLabel)
-          groups.push({label:mLabel,count:1,startCol:4+i,col:getDayColor(d)});
-        else groups[groups.length-1].count++;
-      });
-
-      // Cabeceras fijas fila 1
-      ['Act.','Fecha','ACTIVIDAD','RESPONSABLE'].forEach((h,ci)=>{
-        ws[XLSX.utils.encode_cell({r:1,c:ci})]={v:h,t:'s',
-          s:{font:{bold:true,color:{rgb:'FFFFFF'},sz:9},fill:{fgColor:{rgb:'2E4057'}},
-             alignment:{horizontal:'center',vertical:'center'},border:{bottom:{style:'thin'}}}};
-      });
-
-      groups.forEach(g=>{
-        ws[XLSX.utils.encode_cell({r:1,c:g.startCol})]={v:g.label,t:'s',
-          s:{font:{bold:true,color:{rgb:'FFFFFF'},sz:10},fill:{fgColor:{rgb:g.col}},
-             alignment:{horizontal:'center',vertical:'center'}}};
-        if(g.count>1) (ws['!merges']=ws['!merges']||[]).push({s:{r:1,c:g.startCol},e:{r:1,c:g.startCol+g.count-1}});
-      });
-
-      // Fila 2: headers días
-      allDays.forEach((d,i)=>{
-        const parts=d.split(' ');
-        const bg=getDayColor(d);
-        ws[XLSX.utils.encode_cell({r:2,c:4+i})]={v:`${parts[1]}\n${parts[0]}`,t:'s',
-          s:{font:{bold:true,color:{rgb:'FFFFFF'},sz:8},fill:{fgColor:{rgb:bg}},
-             alignment:{horizontal:'center',vertical:'center',wrapText:true}}};
-      });
-
-      // Filas actividades
-      ACTIVIDADES_CIERRE.forEach((act,ai)=>{
-        const r=3+ai;
-        const actDays=getActDaysLocal(act.num||ai+1);
-        const rowBg=act.bold?'EEF0FB':'FFFFFF';
-        const textColor=act.bold?'1A2F63':'000000';
-
-        ws[XLSX.utils.encode_cell({r,c:0})]={v:ai+1,t:'n',
-          s:{font:{bold:act.bold,sz:9},fill:{fgColor:{rgb:rowBg}},alignment:{horizontal:'center',vertical:'center'}}};
-
-        const dayStr=actDays[0]?actDays[0].split(' ')[0]+'\n'+actDays[0].split(' ')[1]:'';
-        ws[XLSX.utils.encode_cell({r,c:1})]={v:dayStr,t:'s',
-          s:{font:{bold:act.bold,sz:8},fill:{fgColor:{rgb:rowBg}},alignment:{horizontal:'center',vertical:'center',wrapText:true}}};
-
-        ws[XLSX.utils.encode_cell({r,c:2})]={v:act.titulo,t:'s',
-          s:{font:{bold:act.bold,color:{rgb:textColor},sz:9.5},fill:{fgColor:{rgb:rowBg}},
-             alignment:{horizontal:'left',vertical:'center',wrapText:true}}};
-
-        ws[XLSX.utils.encode_cell({r,c:3})]={v:act.responsable,t:'s',
-          s:{font:{bold:act.bold,sz:9},fill:{fgColor:{rgb:rowBg}},
-             alignment:{horizontal:'left',vertical:'center'}}};
-
-        allDays.forEach((d,di)=>{
-          const active=actDays.includes(d);
-          const bg=active?getDayColor(d):rowBg;
-          const val=active&&act.turno?act.turno:'';
-          ws[XLSX.utils.encode_cell({r,c:4+di})]={v:val,t:'s',
-            s:{fill:{fgColor:{rgb:bg}},
-               font:{bold:true,color:{rgb:'FFFFFF'},sz:7},
-               alignment:{horizontal:'center',vertical:act.turno==='PM'?'bottom':'top'}}};
-        });
-
-        range.e.r=Math.max(range.e.r,r);
-      });
-
-      range.e.c = 3+allDays.length;
-      ws['!ref'] = XLSX.utils.encode_range(range);
-      ws['!cols']=[{wch:5},{wch:9},{wch:52},{wch:24},...allDays.map(()=>({wch:8}))];
-      ws['!rows']=[{hpt:14},{hpt:18},{hpt:28},...ACTIVIDADES_CIERRE.map(()=>({hpt:28}))];
-      XLSX.utils.book_append_sheet(wb, ws, c.mes.substring(0,15));
-      XLSX.writeFile(wb, `Cierre_${c.mes.replace(' ','_')}.xlsx`);
-    };
-
-    // Cargar SheetJS via script tag si no está disponible
-    if(window.XLSX) {
-      doExport(window.XLSX);
-    } else {
-      const script = document.createElement('script');
-      script.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
-      script.onload = () => doExport(window.XLSX);
-      document.head.appendChild(script);
-    }
-  }
-
-  return (
-    <div style={{padding:mob?'10px 8px 70px':'20px 24px 60px', maxWidth:1600, margin:'0 auto'}}>
-
-      {/* Header */}
-      <div style={{fontFamily:'monospace',fontSize:10,fontWeight:700,letterSpacing:.14,textTransform:'uppercase',color:'#5b5f6b',marginBottom:4}}>Control de Gestión · Proceso mensual</div>
-      <div style={{fontWeight:800,fontSize:mob?18:24,color:'#1a2f63',marginBottom:4}}>🔒 Cierre de Mes <span style={{color:'#8a2438'}}>2026</span></div>
-      <div style={{fontSize:12,color:'#5b5f6b',marginBottom:14,lineHeight:1.5,maxWidth:800}}>
-        Calendario de actividades para la elaboración del Informe de Gestión mensual. Los últimos 3 días hábiles se descarga y proyecta; al mes siguiente se reversan y carga lo real.
-      </div>
-
-      {/* Leyenda de fases */}
-      <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap'}}>
-        {[['#1a2f63','Descarga y proyección (últ. 3 hábiles del mes)'],
-          ['#1d6b53','Reversa y carga real (1°-2° hábil mes siguiente)'],
-          ['#5b3f8c','EERR, Balance y Reunión Pre Cierre']].map(([bg,label])=>(
-          <div key={bg} style={{display:'flex',alignItems:'center',gap:6,fontSize:11.5,color:'#555'}}>
-            <span style={{width:13,height:13,borderRadius:3,background:bg,display:'inline-block',flexShrink:0}}/>
-            {label}
-          </div>
-        ))}
-      </div>
-
-      {/* Selector — todos los meses */}
-      <div style={{marginBottom:14}}>
-        <div style={{fontSize:10.5,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:.07,marginBottom:7}}>
-          Meses pasados
-        </div>
-        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
-          {CIERRES_PASADOS.map((c,i)=>(
-            <button key={i} onClick={()=>setSelectedIdx(i)}
-              style={{padding:'5px 13px',borderRadius:20,
-                border:`2px solid ${selectedIdx===i?'#888780':'#e0ddd8'}`,
-                background:selectedIdx===i?'#888780':'#f5f3ee',
-                color:selectedIdx===i?'white':'#888',
-                fontWeight:700,fontSize:11.5,cursor:'pointer'}}>
-              ✓ {c.mes}
-            </button>
-          ))}
-        </div>
-        <div style={{fontSize:10.5,fontWeight:700,color:'#999',textTransform:'uppercase',letterSpacing:.07,marginBottom:7}}>
-          Meses activos y futuros
-        </div>
-        <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-          {CIERRES.map((c,i)=>{
-            const idx = CIERRES_PASADOS.length + i;
-            return (
-              <button key={i} onClick={()=>setSelectedIdx(idx)}
-                style={{padding:'5px 13px',borderRadius:20,
-                  border:`2px solid ${selectedIdx===idx?'#1a2f63':'#dad6cc'}`,
-                  background:selectedIdx===idx?'#1a2f63':'white',
-                  color:selectedIdx===idx?'white':'#555',
-                  fontWeight:700,fontSize:11.5,cursor:'pointer'}}>
-                {c.mes}
-              </button>
             );
           })}
-        </div>
-      </div>
 
-      {/* Banner del cierre seleccionado */}
-      <div style={{background:cierre.pasado?'#6b6f78':'#1a2f63',color:'white',borderRadius:8,
-        padding:'10px 16px',marginBottom:16,display:'flex',flexWrap:'wrap',gap:14,alignItems:'center'}}>
-        <div>
-          {cierre.pasado && <div style={{fontSize:9,opacity:.7,fontFamily:'monospace',textTransform:'uppercase',letterSpacing:.1,marginBottom:2}}>CIERRE REALIZADO</div>}
-          <div style={{fontWeight:800,fontSize:mob?13:16}}>Informe de Gestión — {cierre.mes}</div>
+          {/* Formulario nuevo */}
+          {showNew && (
+            <div style={{padding:"14px 16px",background:"#f0f4ff",borderTop:"1px solid #c0d0f0",display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{fontWeight:700,fontSize:13,color:"#1a2f63"}}>Nuevo pendiente</div>
+              <input value={newItem.label} onChange={e=>setNewItem(p=>({...p,label:e.target.value}))}
+                placeholder="Descripción del pendiente..." autoFocus
+                style={{width:"100%",padding:mob?"10px 12px":"8px 11px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none"}}/>
+              <div>
+                <div style={{fontSize:10,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:4,fontWeight:700}}>Fecha límite (opcional)</div>
+                <input type="date" value={newItem.fecha} onChange={e=>setNewItem(p=>({...p,fecha:e.target.value}))}
+                  style={{padding:"7px 10px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none"}}/>
+              </div>
+              <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                <div>
+                  <div style={{fontSize:10,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6,fontWeight:700}}>Urgencia</div>
+                  <div style={{display:"flex",gap:6}}>{[1,2,3].map(v=><ScoreBtn key={v} val={v} current={newItem.urgencia} color="#e34948" onClick={()=>setNewItem(p=>({...p,urgencia:v}))}/>)}</div>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6,fontWeight:700}}>Importancia</div>
+                  <div style={{display:"flex",gap:6}}>{[1,2,3].map(v=><ScoreBtn key={v} val={v} current={newItem.importancia} color="#1a2f63" onClick={()=>setNewItem(p=>({...p,importancia:v}))}/>)}</div>
+                </div>
+              </div>
+              <div>
+                <div style={{fontSize:10,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6,fontWeight:700}}>Estado</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {STATUS_OPTIONS.map(s=>{ const c=STATUS_CONFIG[s]; return (
+                    <button key={s} onClick={()=>setNewItem(p=>({...p,status:s}))}
+                      style={{padding:mob?"6px 11px":"3px 10px",borderRadius:20,border:`2px solid ${newItem.status===s?c.color:"#e0e0e0"}`,background:newItem.status===s?c.bg:"white",color:newItem.status===s?c.color:"#888",fontSize:mob?12:11,fontWeight:700,cursor:"pointer",minHeight:mob?34:undefined}}>
+                      {s}
+                    </button>
+                  );})}
+                </div>
+              </div>
+              <div>
+                <div style={{fontSize:10,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6,fontWeight:700}}>Responsables</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                  {USERS.map(u=>{ const a=newItem.resp.includes(u.id); return (
+                    <button key={u.id} onClick={()=>setNewItem(p=>({...p,resp:a?p.resp.filter(r=>r!==u.id):[...p.resp,u.id]}))}
+                      style={{display:"flex",alignItems:"center",gap:4,padding:mob?"7px 11px":"4px 9px",borderRadius:20,border:`2px solid ${a?u.color:"#e0e0e0"}`,background:a?u.color+"18":"white",color:a?u.color:"#888",fontSize:mob?12.5:11,fontWeight:600,cursor:"pointer",minHeight:mob?38:undefined}}>
+                      <Avatar uid={u.id} size={mob?16:13}/>{u.name.split(" ")[0]}{a&&" ✓"}
+                    </button>
+                  );})}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                <button onClick={()=>{setShowNew(false);setNewItem({label:"",status:"por iniciar",resp:[],fecha:"",urgencia:2,importancia:2});}}
+                  style={{background:"white",border:"1.5px solid #ccc",borderRadius:7,padding:"6px 14px",cursor:"pointer",fontSize:12}}>Cancelar</button>
+                <button onClick={addNew} disabled={saving||!newItem.label.trim()}
+                  style={{background:newItem.label.trim()?"#1a2f63":"#aaa",color:"white",border:"none",borderRadius:7,padding:"6px 16px",cursor:newItem.label.trim()?"pointer":"default",fontSize:12,fontWeight:700}}>
+                  {saving?"Guardando...":"Agregar"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-        <div style={{borderLeft:'1px solid rgba(255,255,255,.25)',paddingLeft:14,fontSize:11.5}}>
-          <span style={{opacity:.65,fontSize:10}}>PERÍODO: </span>
-          <span style={{fontWeight:700}}>{cierre.corteInicio} → {cierre.corteFin}</span>
-        </div>
-        <div style={{borderLeft:'1px solid rgba(255,255,255,.25)',paddingLeft:14,fontSize:11.5}}>
-          <span style={{opacity:.65,fontSize:10}}>DESCARGA: </span>
-          <span style={{fontWeight:700}}>{cierre.descarga[0]} – {cierre.descarga[cierre.descarga.length-1]}</span>
-        </div>
-        <div style={{borderLeft:'1px solid rgba(255,255,255,.25)',paddingLeft:14,fontSize:11.5}}>
-          <span style={{opacity:.65,fontSize:10}}>CARGA / EERR: </span>
-          <span style={{fontWeight:700}}>{cierre.carga[0]} – {cierre.carga[cierre.carga.length-1]}</span>
-        </div>
-        {cierre.nota && (
-          <div style={{borderLeft:'1px solid rgba(255,255,255,.25)',paddingLeft:14,fontSize:11,opacity:.8,fontStyle:'italic',maxWidth:280}}>
-            ⚠️ {cierre.nota}
-          </div>
-        )}
-        <button onClick={()=>downloadExcel(cierre)}
-          style={{marginLeft:'auto',background:'rgba(255,255,255,.18)',border:'1.5px solid rgba(255,255,255,.4)',
-            color:'white',borderRadius:7,padding:'7px 14px',cursor:'pointer',fontSize:12,fontWeight:700,
-            display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap',flexShrink:0}}>
-          ⬇️ Descargar Excel
-        </button>
-      </div>
-
-      {/* GANTT */}
-      <div style={{overflowX:'auto',borderRadius:10,border:'1px solid #dad6cc',boxShadow:'0 2px 8px rgba(0,0,0,.06)'}}>
-        <table style={{borderCollapse:'collapse',fontSize:mob?10.5:12,tableLayout:'fixed',
-          minWidth: LABEL_W + RESP_W + COL_W*allDays.length + 36}}>
-          <colgroup>
-            <col style={{width:28}}/>
-            <col style={{width:LABEL_W}}/>
-            <col style={{width:RESP_W}}/>
-            {allDays.map((_,i)=><col key={i} style={{width:COL_W}}/>)}
-          </colgroup>
-          <thead>
-            {/* Fila meses */}
-            <tr>
-              <th style={{background:'#1a2f63',border:'1px solid rgba(255,255,255,.12)'}} colSpan={3}/>
-              {(()=>{
-                const groups=[];
-                allDays.forEach(d=>{
-                  const mNum = parseInt(d.split('/')[1]);
-                  const mLabel = ['','ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'][mNum];
-                  if(!groups.length||groups[groups.length-1].label!==mLabel)
-                    groups.push({label:mLabel,count:1,bg:getColBg(d)});
-                  else groups[groups.length-1].count++;
-                });
-                return groups.map((g,i)=>(
-                  <th key={i} colSpan={g.count}
-                    style={{background:g.bg,color:'white',fontFamily:'monospace',fontSize:11,
-                      fontWeight:800,letterSpacing:.06,textTransform:'uppercase',
-                      padding:'6px 4px',border:'1px solid rgba(255,255,255,.18)',textAlign:'center'}}>
-                    {g.label}
-                  </th>
-                ));
-              })()}
-            </tr>
-            {/* Fila días */}
-            <tr>
-              <th style={{background:'#1a2f63',color:'rgba(255,255,255,.55)',fontSize:9,padding:'5px 4px',border:'1px solid rgba(255,255,255,.12)',textAlign:'center',fontFamily:'monospace'}}>N°</th>
-              <th style={{background:'#1a2f63',color:'rgba(255,255,255,.8)',fontSize:10,padding:'5px 10px',border:'1px solid rgba(255,255,255,.12)',textAlign:'left',fontFamily:'monospace',letterSpacing:.03}}>ACTIVIDAD</th>
-              <th style={{background:'#1a2f63',color:'rgba(255,255,255,.7)',fontSize:9.5,padding:'5px 8px',border:'1px solid rgba(255,255,255,.12)',textAlign:'left',fontFamily:'monospace'}}>RESPONSABLE</th>
-              {allDays.map((d,i)=>{
-                const bg=getColBg(d);
-                const parts=d.split(' '); // parts[0]=dow "Jue", parts[1]="25/06"
-                return (
-                  <th key={i} style={{background:bg,color:'white',fontSize:mob?9:10.5,fontFamily:'monospace',
-                    fontWeight:700,padding:'5px 2px',border:'1px solid rgba(255,255,255,.18)',textAlign:'center',lineHeight:1.3}}>
-                    <div style={{fontSize:mob?9.5:11,fontWeight:800}}>{parts[1]}</div>
-                    <div style={{fontSize:mob?8:9,opacity:.75,fontWeight:500}}>{parts[0]}</div>
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {ACTIVIDADES_CIERRE.map((act,i)=>{
-              const actDays=getActDays(act);
-              const bg=FASE_COLORS[act.fase];
-              const isPast=cierre.pasado;
-              return (
-                <tr key={act.id}
-                  style={{background:act.bold?'#f8f7ff':'white'}}
-                  onMouseEnter={e=>e.currentTarget.style.background=act.bold?'#f0eeff':'#f7f6f2'}
-                  onMouseLeave={e=>e.currentTarget.style.background=act.bold?'#f8f7ff':'white'}>
-                  <td style={{padding:'6px 4px',border:'1px solid #e8e5e0',textAlign:'center',
-                    color:'#bbb',fontSize:mob?9:10,fontFamily:'monospace'}}>{i+1}</td>
-                  <td style={{padding:'6px 10px',border:'1px solid #e8e5e0',
-                    fontWeight:act.bold?800:400,color:'#1a2f63',lineHeight:1.35,fontSize:mob?10.5:12}}>
-                    {act.titulo}
-                  </td>
-                  <td style={{padding:'6px 8px',border:'1px solid #e8e5e0',
-                    fontSize:mob?9.5:11,color:act.bold?'#333':'#666',fontWeight:act.bold?600:400,lineHeight:1.3}}>
-                    {act.responsable}
-                  </td>
-                  {allDays.map((d,di)=>{
-                    const active=actDays.includes(d);
-                    const isAM=active&&act.turno==='AM';
-                    const isPM=active&&act.turno==='PM';
-                    const isFull=active&&!act.turno;
-                    const cellBg=cierre.pasado&&active?bg+'aa':bg;
-                    return (
-                      <td key={di} style={{padding:0,border:'1px solid #e8e5e0',position:'relative',
-                        textAlign:'center',verticalAlign:'middle',minHeight:32,height:32}}>
-                        {isAM && (
-                          <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column'}}>
-                            <div style={{flex:1,background:cellBg,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                              <span style={{fontSize:7.5,fontWeight:800,color:'white',letterSpacing:.02}}>AM</span>
-                            </div>
-                            <div style={{flex:1,background:'transparent'}}/>
-                          </div>
-                        )}
-                        {isPM && (
-                          <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column'}}>
-                            <div style={{flex:1,background:'transparent'}}/>
-                            <div style={{flex:1,background:cellBg,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                              <span style={{fontSize:7.5,fontWeight:800,color:'white',letterSpacing:.02}}>PM</span>
-                            </div>
-                          </div>
-                        )}
-                        {isFull && (
-                          <div style={{position:'absolute',inset:0,background:cellBg}}/>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      <div style={{marginTop:10,fontSize:11,color:'#aaa',display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:6}}>
-        <span style={{fontSize:11.5,color:'#555'}}>
-          {ACTIVIDADES_CIERRE.length} actividades · {ACTIVIDADES_CIERRE.filter(a=>a.bold).length} críticas
-        </span>
-        <span style={{fontFamily:'monospace'}}>Control de Gestión · v4</span>
-      </div>
+      )}
     </div>
   );
 }
 
-// ─────────────────────────────────────────────
-// PAGE 5 — TARJETAS (juego del equipo)
-// ─────────────────────────────────────────────
-
-// Helpers de fecha/semana
-function getISOWeek(date) {
-  const d = new Date(date);
-  d.setHours(0,0,0,0);
-  d.setDate(d.getDate() + 4 - (d.getDay()||7));
-  const yearStart = new Date(d.getFullYear(),0,1);
-  return `${d.getFullYear()}-W${Math.ceil((((d-yearStart)/86400000)+1)/7).toString().padStart(2,'0')}`;
-}
-function getSemanaLabel(isoWeek) {
-  const [year, wk] = isoWeek.split('-W');
-  const d = new Date(year);
-  d.setDate(d.getDate() + (parseInt(wk)-1)*7 + 1 - d.getDay());
-  return `Semana del ${d.getDate()}/${d.getMonth()+1}`;
-}
-function getViernes(isoWeek) {
-  const [year, wk] = isoWeek.split('-W');
-  const d = new Date(year);
-  d.setDate(d.getDate() + (parseInt(wk)-1)*7 + 5 - d.getDay());
-  return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`;
-}
 
 function TarjetasPage({currentUser}) {
   const mob = useIsMobile();
@@ -2747,29 +2350,44 @@ function TaskModal({task, comments, currentUser, onClose, onSave, onDelete, onDu
   const [recurrType, setRecurrType] = useState("semanal");
   const [recurrHasta, setRecurrHasta] = useState("2026-12-31");
   const [recurrPreview, setRecurrPreview] = useState([]);
+  const [recurrDiaHabil, setRecurrDiaHabil] = useState(1);
 
   const MESES_SHORT = ["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
   const DIAS_SHORT  = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
 
-  function calcRecurr(tipo, hasta) {
+  const FERIADOS_SET = new Set(["2026-07-16","2026-08-15","2026-09-18","2026-09-19","2026-10-12","2026-10-31","2026-11-01","2026-12-08","2026-12-25"]);
+  function isHabilDate(d) { return d.getDay()!==0 && d.getDay()!==6 && !FERIADOS_SET.has(d.toISOString().split('T')[0]); }
+
+  function getNthHabil(year, month, n) {
+    const d = new Date(year, month-1, 1);
+    let count = 0;
+    while(d.getMonth()===month-1) {
+      if(isHabilDate(d)) { count++; if(count===n) return new Date(d); }
+      d.setDate(d.getDate()+1);
+    }
+    return null;
+  }
+
+  function calcRecurr(tipo, hasta, diaHabil) {
     const t = tipo || recurrType;
     const h = hasta || recurrHasta;
+    const nth = diaHabil || recurrDiaHabil;
     const base = new Date(2026, draft.month-1, draft.day);
     const hastaDate = new Date(h);
     const fechas = [];
     if(t==="semanal") {
       const d = new Date(base); d.setDate(d.getDate()+7);
       while(d <= hastaDate) {
-        if(d.getDay()!==0 && d.getDay()!==6) fechas.push(new Date(d));
+        if(isHabilDate(d)) fechas.push(new Date(d));
         d.setDate(d.getDate()+7);
       }
     } else {
       let m = draft.month+1, y = 2026;
       while(true) {
         if(m>12){m=1;y++;}
-        const nd = new Date(y, m-1, draft.day);
-        if(nd > hastaDate) break;
-        if(nd.getDay()!==0 && nd.getDay()!==6) fechas.push(new Date(nd));
+        const nd = getNthHabil(y, m, nth);
+        if(!nd || nd > hastaDate) break;
+        fechas.push(nd);
         m++;
       }
     }
@@ -2845,12 +2463,25 @@ function TaskModal({task, comments, currentUser, onClose, onSave, onDelete, onDu
               <Field label="Título">
                 {canEdit ? <input value={draft.title} onChange={e=>setDraft(d=>({...d,title:e.target.value}))} style={{width:"100%",padding: mob?"10px 12px":"7px 10px",border:"1.5px solid #e0e0e0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none"}}/> : <div style={{fontSize:13,padding:"3px 0"}}>{draft.title}</div>}
               </Field>
-              <Field label="Reagendar — día">
+              <Field label="Reagendar">
                 {canEdit ? (
-                  <select value={draft.day} onChange={e=>setDraft(d=>({...d,day:parseInt(e.target.value)}))} style={{padding: mob?"10px 12px":"6px 10px",border:"1.5px solid #e0e0e0",borderRadius:7,fontSize:mob?16:13,background:"white",cursor:"pointer",width:"100%"}}>
-                    {getWorkDays(draft.month||7).map(d=><option key={d} value={d}>Día {d}</option>)}
-                  </select>
-                ) : <div style={{fontSize:13}}>Día {draft.day}</div>}
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                    <div style={{flex:1,minWidth:120}}>
+                      <div style={{fontSize:10,color:"#aaa",marginBottom:4}}>Mes</div>
+                      <select value={draft.month||7} onChange={e=>setDraft(d=>({...d,month:parseInt(e.target.value)}))}
+                        style={{width:"100%",padding:mob?"10px 12px":"6px 10px",border:"1.5px solid #e0e0e0",borderRadius:7,fontSize:mob?16:13,background:"white",cursor:"pointer"}}>
+                        {MONTHS.map(m=><option key={m.num} value={m.num}>{m.label}</option>)}
+                      </select>
+                    </div>
+                    <div style={{flex:1,minWidth:120}}>
+                      <div style={{fontSize:10,color:"#aaa",marginBottom:4}}>Día hábil</div>
+                      <select value={draft.day} onChange={e=>setDraft(d=>({...d,day:parseInt(e.target.value)}))}
+                        style={{width:"100%",padding:mob?"10px 12px":"6px 10px",border:"1.5px solid #e0e0e0",borderRadius:7,fontSize:mob?16:13,background:"white",cursor:"pointer"}}>
+                        {getWorkDays(draft.month||7).map(d=><option key={d} value={d}>Día {d}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                ) : <div style={{fontSize:13}}>Mes {draft.month} · Día {draft.day}</div>}
               </Field>
               <Field label="Tipo">
                 {canEdit ? (
@@ -2890,7 +2521,7 @@ function TaskModal({task, comments, currentUser, onClose, onSave, onDelete, onDu
                         <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Frecuencia</div>
                         <div style={{display:"flex",gap:8}}>
                           {[{id:"semanal",label:`📅 Semanal (cada ${DIAS_SHORT[new Date(2026,draft.month-1,draft.day).getDay()]})`},
-                            {id:"mensual",label:`📆 Mensual (día ${draft.day} de cada mes)`}].map(f=>(
+                            {id:"mensual",label:`📆 Mensual (día hábil fijo)`}].map(f=>(
                             <button key={f.id} onClick={()=>{setRecurrType(f.id);calcRecurr(f.id,recurrHasta);}}
                               style={{flex:1,padding:"8px 6px",borderRadius:8,border:`2px solid ${recurrType===f.id?"#1a2f63":"#e0e0e0"}`,
                                 background:recurrType===f.id?"#1a2f63":"white",color:recurrType===f.id?"white":"#666",
@@ -2901,11 +2532,33 @@ function TaskModal({task, comments, currentUser, onClose, onSave, onDelete, onDu
                         </div>
                       </div>
 
+                      {/* Selector de día hábil para mensual */}
+                      {recurrType==="mensual" && (
+                        <div>
+                          <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>¿Qué día hábil del mes?</div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                            {[1,2,3,4,5].map(n=>(
+                              <button key={n} onClick={()=>{setRecurrDiaHabil(n);calcRecurr("mensual",recurrHasta,n);}}
+                                style={{padding:"6px 12px",borderRadius:8,
+                                  border:`2px solid ${recurrDiaHabil===n?"#1a2f63":"#e0e0e0"}`,
+                                  background:recurrDiaHabil===n?"#1a2f63":"white",
+                                  color:recurrDiaHabil===n?"white":"#666",
+                                  fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                                {n}° hábil
+                              </button>
+                            ))}
+                          </div>
+                          <div style={{fontSize:10,color:"#aaa",marginTop:4}}>
+                            Ej: "1° hábil" = primer lunes/martes/etc hábil de cada mes
+                          </div>
+                        </div>
+                      )}
+
                       {/* Hasta */}
                       <div>
                         <div style={{fontSize:10,fontWeight:700,color:"#aaa",textTransform:"uppercase",letterSpacing:.07,marginBottom:6}}>Repetir hasta</div>
                         <input type="date" value={recurrHasta}
-                          onChange={e=>{setRecurrHasta(e.target.value);calcRecurr(recurrType,e.target.value);}}
+                          onChange={e=>{setRecurrHasta(e.target.value);calcRecurr(recurrType,e.target.value,recurrDiaHabil);}}
                           min="2026-07-01" max="2026-12-31"
                           style={{padding:"7px 10px",border:"1.5px solid #c0d0f0",borderRadius:7,fontSize:mob?16:13,fontFamily:"inherit",outline:"none"}}/>
                       </div>
@@ -2923,7 +2576,7 @@ function TaskModal({task, comments, currentUser, onClose, onSave, onDelete, onDu
                               </span>
                             ))}
                           </div>
-                          {recurrPreview.length>20 && <div style={{fontSize:10,color:"#aaa",marginTop:4}}>y {recurrPreview.length-20} más...</div>}
+                          {recurrPreview.length>20 && <div style={{fontSize:10,color:"#aaa",marginTop:4}}>+{recurrPreview.length-20} más</div>}
                         </div>
                       )}
                       {recurrPreview.length===0 && <div style={{fontSize:11,color:"#e34948"}}>No hay días hábiles en ese rango.</div>}
