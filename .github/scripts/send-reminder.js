@@ -3,7 +3,7 @@
 
 const nodemailer = require("nodemailer");
 
-const SB_URL = "https://aemsibavanjertkiznko.supabase.co";
+const SB_URL = "https://gmtcsaoiaeknpzoyljjm.supabase.co";
 const SB_KEY = process.env.SB_KEY;
 
 const DESTINATARIOS = [
@@ -156,6 +156,10 @@ async function main() {
     headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
   });
   const allTasks = await res.json();
+  if(!Array.isArray(allTasks)) {
+    console.error("Error Supabase:", JSON.stringify(allTasks));
+    process.exit(1);
+  }
 
   // Calcular semanas
   const now = new Date();
