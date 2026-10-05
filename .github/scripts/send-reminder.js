@@ -19,6 +19,7 @@ const DESTINATARIOS = [
 const USERS = {
   leo: "Leonardo Ortiz", bas: "Bastián Retamal", iso: "Isidora Sepúlveda",
   dan: "Daniela Riffo",  joa: "Joaquín Peña",    edu: "Eduardo Morales",
+  mad: "Madai Noriega",
 };
 
 const MESES = ["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
