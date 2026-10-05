@@ -13,6 +13,7 @@ const DESTINATARIOS = [
   { uid: "dan", nombre: "Daniela",  email: "daniela.riffo@redsalud.cl" },
   { uid: "joa", nombre: "Joaquín",  email: "joaquin.pena@redsalud.cl" },
   { uid: "edu", nombre: "Eduardo",  email: "eduardo.morales@redsalud.cl" },
+  { uid: "mad", nombre: "Madai",    email: "madai.noriega@sanatorioaleman.cl" },
 ];
 
 const USERS = {
