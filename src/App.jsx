@@ -56,6 +56,7 @@ const BIRTHDAYS = [
   {uid:"iso", name:"Isidora Sepúlveda", month:1,  day:6},
   {uid:"joa", name:"Joaquín Peña",      month:2,  day:5},
   {uid:"bas", name:"Bastián Retamal",   month:3,  day:27},
+  {uid:"mad", name:"Madai Noriega",     month:7,  day:31},
   {uid:"dan", name:"Daniela Riffo",     month:11, day:30},
   {uid:"leo", name:"Leonardo Ortiz",    month:12, day:1},
   {uid:"edu", name:"Eduardo Morales",   month:12, day:19},
