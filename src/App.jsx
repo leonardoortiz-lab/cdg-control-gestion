@@ -49,6 +49,7 @@ const USERS = [
   {id:"dan", name:"Daniela Riffo",     role:"editor", color:"#b9711b", initials:"DR"},
   {id:"joa", name:"Joaquín Peña",      role:"editor", color:"#0e6e74", initials:"JP"},
   {id:"edu", name:"Eduardo Morales",   role:"editor", color:"#2e6b3a", initials:"EM"},
+  {id:"mad", name:"Madai Noriega",     role:"editor", color:"#7a4a2e", initials:"MN"},
 ];
 
 const BIRTHDAYS = [
