@@ -22,6 +22,11 @@ const USERS = {
   mad: "Madai Noriega",
 };
 
+const USER_COLOR = {
+  leo:"#1a2f63", bas:"#a3265c", iso:"#5b3f8c",
+  dan:"#b9711b", joa:"#0e6e74", edu:"#2e6b3a", mad:"#7a4a2e",
+};
+
 const MESES = ["","Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 const DIAS  = ["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"];
 
@@ -63,7 +68,80 @@ function getTasksInRange(tasks, from, to) {
   });
 }
 
-function buildEmail(thisWeekTasks, nextWeekHitos, thisWeek, nextWeek) {
+// ── Matriz Urgencia × Importancia (igual a la vista "Matriz 2D" de Pendientes) ──
+const ACTIVOS_STATUS = ["por iniciar","en ajuste","en proceso"];
+
+function esc(s) {
+  return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function buildMatrizHTML(pendientes) {
+  const activos = pendientes.filter(p => ACTIVOS_STATUS.includes(p.status));
+  const celdas = {};
+  for(let u=1;u<=3;u++) for(let i=1;i<=3;i++) celdas[`${u}-${i}`] = [];
+  activos.forEach(p => {
+    const key = `${p.urgencia||2}-${p.importancia||2}`;
+    if(celdas[key]) celdas[key].push(p);
+  });
+  const getBg = (u,i) => u*i >= 6 ? "#fff0f0" : u*i >= 4 ? "#fffbe6" : "#f0f8f0";
+  const head = "text-align:center;font-family:monospace;font-weight:700;font-size:11px;color:#1a2f63;padding:6px 0;background:#f0f4ff;border-radius:6px;";
+
+  let grid = `<div></div>` + [1,2,3].map(u => `<div style="${head}">U=${u}</div>`).join("");
+  [3,2,1].forEach(i => {
+    grid += `<div style="${head}display:flex;align-items:center;justify-content:center;">I=${i}</div>`;
+    [1,2,3].forEach(u => {
+      const items = celdas[`${u}-${i}`];
+      const cards = items.length === 0
+        ? `<div style="color:#ddd;font-size:9px;text-align:center;margin-top:8px;">—</div>`
+        : items.map(p => {
+            const resp = (Array.isArray(p.resp) ? p.resp : JSON.parse(p.resp||"[]"))
+              .filter(uid => USERS[uid])
+              .map(uid => `<span style="font-size:8.5px;color:${USER_COLOR[uid]||"#666"};font-weight:600;margin-right:3px;">${esc(USERS[uid].split(" ")[0])}</span>`)
+              .join("");
+            return `<div style="font-size:10px;background:white;border-radius:5px;padding:3px 6px;margin-bottom:3px;line-height:1.3;box-shadow:0 1px 3px rgba(0,0,0,.07);">
+              <div style="font-weight:600;color:#272a33;">${esc(p.label)}</div>
+              ${resp ? `<div style="margin-top:2px;">${resp}</div>` : ""}
+            </div>`;
+          }).join("");
+      grid += `<div style="background:${getBg(u,i)};border-radius:8px;padding:6px;min-height:60px;border:1px solid #e8e5e0;">${cards}</div>`;
+    });
+  });
+
+  const leyenda = [["#fff0f0","Alta prioridad (U×I ≥ 6)"],["#fffbe6","Media prioridad"],["#f0f8f0","Baja prioridad"]]
+    .map(([bg,label]) => `<span style="display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:#666;margin:0 6px;">
+      <span style="width:12px;height:12px;border-radius:3px;background:${bg};border:1px solid #ddd;display:inline-block;"></span>${label}</span>`)
+    .join("");
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
+<body style="margin:0;background:white;font-family:'Segoe UI',Arial,sans-serif;">
+  <div id="matriz" style="width:560px;padding:16px;background:white;">
+    <div style="font-size:11px;color:#aaa;margin-bottom:8px;text-align:center;">Urgencia (eje X) × Importancia (eje Y)</div>
+    <div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr;gap:4px;">${grid}</div>
+    <div style="margin-top:10px;text-align:center;">${leyenda}</div>
+  </div>
+</body></html>`;
+}
+
+// Devuelve un PNG de la matriz, o null si no se pudo generar (el correo sale igual)
+async function renderMatrizPNG(pendientes) {
+  let browser;
+  try {
+    const puppeteer = require("puppeteer");
+    browser = await puppeteer.launch({ args: ["--no-sandbox"] });
+    const page = await browser.newPage();
+    await page.setViewport({ width: 600, height: 800, deviceScaleFactor: 2 });
+    await page.setContent(buildMatrizHTML(pendientes), { waitUntil: "load" });
+    const el = await page.$("#matriz");
+    return await el.screenshot({ type: "png" });
+  } catch(err) {
+    console.error("⚠️ No se pudo generar la imagen de la matriz:", err.message);
+    return null;
+  } finally {
+    if(browser) await browser.close();
+  }
+}
+
+function buildEmail(thisWeekTasks, nextWeekHitos, thisWeek, nextWeek, conMatriz) {
   const weekLabel = `${fmt(thisWeek.mon)} – ${fmt(thisWeek.fri)}`;
   const nextLabel = `${fmt(nextWeek.mon)} – ${fmt(nextWeek.fri)}`;
 
@@ -141,6 +219,13 @@ function buildEmail(thisWeekTasks, nextWeekHitos, thisWeek, nextWeek) {
       </div>
       ${hitosHTML}
     </div>
+    ${conMatriz ? `<div style="background:white;padding:20px 28px;border-left:1px solid #e0ddd8;border-right:1px solid #e0ddd8;margin-top:2px;">
+      <div style="margin-bottom:16px;">
+        <span style="background:#5b3f8c;color:white;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;">⚠️ PENDIENTES ESTRATÉGICOS</span>
+        <span style="color:#888;font-size:12px;margin-left:10px;">Urgencia × Importancia</span>
+      </div>
+      <img src="cid:matriz" alt="Matriz de pendientes urgencia × importancia" style="width:100%;max-width:544px;height:auto;display:block;border-radius:8px;"/>
+    </div>` : ""}
     <div style="background:#f0ede8;border-radius:0 0 12px 12px;padding:16px 28px;text-align:center;border:1px solid #e0ddd8;">
       <p style="color:#aaa;font-size:11px;margin:0;">
         Control de Gestión · Clínica RedSalud 2026<br/>
@@ -174,7 +259,21 @@ async function main() {
   const nextWeekHitos = getTasksInRange(allTasks, nextWeek.mon, nextWeek.fri)
     .filter(t => ["hito","cierre","audit","precierre","iceo"].includes(t.tipo || t.type));
 
-  const html = buildEmail(thisWeekTasks, nextWeekHitos, thisWeek, nextWeek);
+  // Pendientes para la imagen de la matriz
+  let pendientes = [];
+  try {
+    const resP = await fetch(`${SB_URL}/rest/v1/pendientes?order=created_at.asc`, {
+      headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
+    });
+    const data = await resP.json();
+    if(Array.isArray(data)) pendientes = data;
+    else console.error("⚠️ Error Supabase pendientes:", JSON.stringify(data));
+  } catch(err) {
+    console.error("⚠️ No se pudieron leer los pendientes:", err.message);
+  }
+  const matrizPNG = await renderMatrizPNG(pendientes);
+
+  const html = buildEmail(thisWeekTasks, nextWeekHitos, thisWeek, nextWeek, !!matrizPNG);
 
   // Configurar Gmail
   const transporter = nodemailer.createTransport({
@@ -192,11 +291,15 @@ async function main() {
     to: todos,
     subject: `⛏️ Resumen semanal CdG · ${new Date().toLocaleDateString("es-CL",{day:"2-digit",month:"2-digit"})}`,
     html,
+    attachments: matrizPNG
+      ? [{ filename: "matriz-pendientes.png", content: matrizPNG, cid: "matriz" }]
+      : [],
   });
 
   console.log("✅ Email enviado:", info.messageId);
   console.log(`📅 Tareas semana: ${thisWeekTasks.filter(t=>(t.tipo||t.type)!=="rutina").length}`);
   console.log(`🔴 Hitos próxima semana: ${nextWeekHitos.length}`);
+  console.log(`⚠️ Pendientes activos en la matriz: ${pendientes.filter(p=>ACTIVOS_STATUS.includes(p.status)).length}${matrizPNG ? "" : " (sin imagen)"}`);
 }
 
 main().catch(err => {
