@@ -19,7 +19,7 @@ jobs:
           node-version: '20'
 
       - name: Instalar dependencias
-        run: npm install nodemailer
+        run: npm install --no-save nodemailer puppeteer
 
       - name: Enviar recordatorio semanal
         env:
